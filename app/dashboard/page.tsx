@@ -1,7 +1,7 @@
- TypeScript
+
 import { createClient } from '../../utils/supabase/server'
 import { redirect } from 'next/navigation'
-import MissionsBoard, { Mission } from '../../components/MissionsBoard'
+import MissionBoard, { Mission } from '../../components/MissionBoard'
 
 async function signOut() {
   'use server'
@@ -68,7 +68,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <MissionsBoard
+        <MissionBoard
           initialMissions={(missions as Mission[]) || []}
           isAdmin={isAdmin}
           userEmail={user.email || ''}
