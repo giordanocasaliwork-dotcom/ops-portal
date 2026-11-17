@@ -1,6 +1,14 @@
- import { createClient } from '../../utils/supabase/server'
+ TypeScript
+import { createClient } from '../../utils/supabase/server'
 import { redirect } from 'next/navigation'
 import MissionsBoard, { Mission } from '../../components/MissionsBoard'
+
+async function signOut() {
+  'use server'
+  const supabaseServer = createClient()
+  await supabaseServer.auth.signOut()
+  redirect('/login')
+}
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -30,13 +38,6 @@ export default async function DashboardPage() {
         .order('created_at', { ascending: false })
         .limit(10)
     : { data: null }
-
-  async function signOut() {
-    'use server'
-    const supabaseServer = createClient()
-    await supabaseServer.auth.signOut()
-    redirect('/login')
-  }
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
@@ -97,4 +98,23 @@ export default async function DashboardPage() {
                           {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
                         </td>
                         <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
-                        <td className="py-2 pr-4 text-neutral-30
+                        <td className="py-2 pr-4 text-neutral-300">{log.action}</td>
+                        <td className="py-2 text-emerald-400 font-semibold">{log.status}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-neutral-500">
+                        Nessun evento registrato.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
