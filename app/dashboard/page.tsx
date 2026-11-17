@@ -1,12 +1,12 @@
  'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
 
 export default function DashboardPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -32,9 +32,9 @@ export default function DashboardPage() {
         .eq('id', currentUser.id)
         .single()
 
-      const userRole = profile?.role || 'operator'
+      const userRole = String(profile?.role || 'operator').trim()
       setRole(userRole)
-      const adminFlag = userRole === 'admin'
+      const adminFlag = userRole.toLowerCase() === 'admin'
 
       const { data: missionsData } = await supabase
         .from('missions')
@@ -72,7 +72,7 @@ export default function DashboardPage() {
     )
   }
 
-  const isAdmin = role === 'admin'
+  const isAdmin = role.toLowerCase() === 'admin'
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
@@ -87,7 +87,7 @@ export default function DashboardPage() {
               {isAdmin && (
                 <button
                   onClick={() => router.push('/team')}
-                  className="bg-neutral-800 hover:bg-neutral-700 text-neutral-100 border border-neutral-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
+                  className="bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition font-semibold"
                 >
                   Gestione Team
                 </button>
