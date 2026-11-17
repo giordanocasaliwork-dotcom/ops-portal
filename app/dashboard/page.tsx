@@ -1,43 +1,78 @@
+ 'use client'
 
-import { createClient } from '../../utils/supabase/server'
-import { redirect } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
 
-async function signOut() {
-  'use server'
-  const supabaseServer = createClient()
-  await supabaseServer.auth.signOut()
-  redirect('/login')
-}
-
-export default async function DashboardPage() {
+export default function DashboardPage() {
   const supabase = createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const router = useRouter()
 
-  if (error || !user) {
-    redirect('/login')
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const [role, setRole] = useState<string>('operator')
+  const [missions, setMissions] = useState<Mission[]>([])
+  const [logs, setLogs] = useState<any[]>([])
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      const { data: { user: currentUser }, error } = await supabase.auth.getUser()
+
+      if (error || !currentUser) {
+        router.replace('/login')
+        return
+      }
+
+      setUser(currentUser)
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', currentUser.id)
+        .single()
+
+      const userRole = profile?.role || 'operator'
+      setRole(userRole)
+      const adminFlag = userRole === 'admin'
+
+      const { data: missionsData } = await supabase
+        .from('missions')
+        .select('*')
+        .order('start_time', { ascending: true })
+
+      setMissions((missionsData as Mission[]) || [])
+
+      if (adminFlag) {
+        const { data: logsData } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        setLogs(logsData || [])
+      }
+
+      setLoading(false)
+    }
+
+    loadDashboard()
+  }, [supabase, router])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.replace('/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', user.id)
-    .single()
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
+        Caricamento area operativa in corso...
+      </div>
+    )
+  }
 
-  const isAdmin = profile?.role === 'admin'
-
-  const { data: missions } = await supabase
-    .from('missions')
-    .select('*')
-    .order('start_time', { ascending: true })
-
-  const { data: logs } = isAdmin
-    ? await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10)
-    : { data: null }
+  const isAdmin = role === 'admin'
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
@@ -48,14 +83,22 @@ export default async function DashboardPage() {
               <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">Ops Portal • Dashboard</h1>
               <p className="text-xs text-neutral-400 mt-1">Area Operativa Riservata • Connessione Sicura</p>
             </div>
-            <form action={signOut}>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/team')}
+                  className="bg-neutral-800 hover:bg-neutral-700 text-neutral-100 border border-neutral-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
+                >
+                  Gestione Team
+                </button>
+              )}
               <button
-                type="submit"
+                onClick={handleSignOut}
                 className="bg-neutral-950 hover:bg-red-950/60 text-neutral-300 hover:text-red-300 border border-neutral-700 hover:border-red-800 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
               >
                 Disconnetti
               </button>
-            </form>
+            </div>
           </div>
 
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
@@ -63,13 +106,13 @@ export default async function DashboardPage() {
             <p><span className="text-neutral-500">Operatore:</span> {user.email}</p>
             <p>
               <span className="text-neutral-500">Ruolo:</span>{' '}
-              <span className="uppercase text-emerald-400 font-bold">{profile?.role || 'operator'}</span>
+              <span className="uppercase text-emerald-400 font-bold">{role}</span>
             </p>
           </div>
         </div>
 
         <MissionBoard
-          initialMissions={(missions as Mission[]) || []}
+          initialMissions={missions}
           isAdmin={isAdmin}
           userEmail={user.email || ''}
           userId={user.id}
