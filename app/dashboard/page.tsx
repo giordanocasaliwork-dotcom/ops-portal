@@ -24,15 +24,21 @@ export default function DashboardPage() {
         return
       }
 
-      setUser(currentUser)
-
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('role, full_name, is_active')
         .eq('id', currentUser.id)
         .single()
 
-      const userRole = String(profile?.role || 'operator').trim()
+      if (!profile || !profile.is_active) {
+        await supabase.auth.signOut()
+        router.replace('/login')
+        return
+      }
+
+      setUser(currentUser)
+
+      const userRole = String(profile.role || 'operator').trim()
       setRole(userRole)
       const adminFlag = userRole.toLowerCase() === 'admin'
 
@@ -67,7 +73,7 @@ export default function DashboardPage() {
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
-        Caricamento area operativa in corso...
+        Verifica clearance e caricamento area operativa...
       </div>
     )
   }
@@ -142,7 +148,17 @@ export default function DashboardPage() {
                         </td>
                         <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
                         <td className="py-2 pr-4 text-neutral-300">{log.action}</td>
-                        <td className="py-2 text-emerald-400 font-semibold">{log.status}</td>
+                        <td
+                          className={`py-2 font-semibold ${
+                            log.status === 'DENIED'
+                              ? 'text-red-400'
+                              : log.status === 'PENDING'
+                              ? 'text-amber-400'
+                              : 'text-emerald-400'
+                          }`}
+                        >
+                          {log.status}
+                        </td>
                       </tr>
                     ))
                   ) : (
