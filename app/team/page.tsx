@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,6 +8,7 @@ type Profile = {
   id: string
   email: string
   full_name: string | null
+  callsign: string | null
   role: 'admin' | 'operator'
   is_active: boolean
   created_at: string
@@ -18,6 +19,7 @@ export default function TeamManagementPage() {
   const router = useRouter()
 
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [callsignDrafts, setCallsignDrafts] = useState<Record<string, string>>({})
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -30,7 +32,13 @@ export default function TeamManagementPage() {
       .order('created_at', { ascending: false })
 
     if (!error && data) {
-      setProfiles(data as Profile[])
+      const list = data as Profile[]
+      setProfiles(list)
+      const drafts: Record<string, string> = {}
+      list.forEach((p) => {
+        drafts[p.id] = p.callsign || ''
+      })
+      setCallsignDrafts(drafts)
     }
   }, [supabase])
 
@@ -67,9 +75,11 @@ export default function TeamManagementPage() {
 
   const handleUpdateUser = async (
     target: Profile,
-    updates: Partial<Pick<Profile, 'role' | 'is_active'>>
+    updates: Partial<Pick<Profile, 'role' | 'is_active' | 'callsign'>>
   ) => {
-    if (target.id === currentUserId) return
+    if (target.id === currentUserId && ('role' in updates || 'is_active' in updates)) {
+      return
+    }
     setUpdatingId(target.id)
 
     const { error } = await supabase
@@ -85,10 +95,16 @@ export default function TeamManagementPage() {
       })
       await fetchProfiles()
     } else {
-      alert(`Errore aggiornamento permessi: ${error.message}`)
+      alert(`Errore aggiornamento: ${error.message}`)
     }
 
     setUpdatingId(null)
+  }
+
+  const handleSaveCallsign = async (member: Profile) => {
+    const formatted = (callsignDrafts[member.id] || '').trim().toUpperCase() || null
+    if (formatted === (member.callsign || null)) return
+    await handleUpdateUser(member, { callsign: formatted })
   }
 
   if (loading) {
@@ -105,10 +121,10 @@ export default function TeamManagementPage() {
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
-              Ops Portal • Gestione Team & Permessi
+              Ops Portal • Gestione Team & Callsign
             </h1>
             <p className="text-xs text-neutral-400 mt-1">
-              Abilitazione operatori, assegnazione ruoli RBAC e controllo accessi
+              Assegnazione identificativi radio, ruoli RBAC e controllo accessi
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -129,8 +145,9 @@ export default function TeamManagementPage() {
             <thead className="bg-neutral-950 uppercase text-neutral-500 border-b border-neutral-800">
               <tr>
                 <th className="px-4 py-3">Operatore</th>
+                <th className="px-4 py-3">Callsign Operativo</th>
                 <th className="px-4 py-3">Ruolo</th>
-                <th className="px-4 py-3">Stato Accesso</th>
+                <th className="px-4 py-3">Stato</th>
                 <th className="px-4 py-3 text-right">Azioni</th>
               </tr>
             </thead>
@@ -138,6 +155,9 @@ export default function TeamManagementPage() {
               {profiles.map((member) => {
                 const isSelf = member.id === currentUserId
                 const isBusy = updatingId === member.id
+                const currentDraft = callsignDrafts[member.id] ?? ''
+                const isDirty =
+                  (currentDraft.trim().toUpperCase() || null) !== (member.callsign || null)
 
                 return (
                   <tr key={member.id} className="hover:bg-neutral-800/40">
@@ -151,6 +171,40 @@ export default function TeamManagementPage() {
                         )}
                       </div>
                       <div className="text-neutral-400 mt-0.5">{member.email}</div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          disabled={isBusy}
+                          value={currentDraft}
+                          onChange={(e) =>
+                            setCallsignDrafts((prev) => ({
+                              ...prev,
+                              [member.id]: e.target.value.toUpperCase(),
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleSaveCallsign(member)
+                            }
+                          }}
+                          placeholder="ES. ALPHA-1"
+                          className="w-28 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-emerald-300 font-bold uppercase placeholder:text-neutral-600 focus:outline-none focus:border-emerald-600"
+                        />
+                        {isDirty && (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleSaveCallsign(member)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold px-2 py-1 rounded text-[10px] uppercase transition"
+                          >
+                            Salva
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3">
@@ -194,7 +248,7 @@ export default function TeamManagementPage() {
                               : 'bg-emerald-600 text-neutral-950 hover:bg-emerald-500'
                           } disabled:opacity-50`}
                         >
-                          {member.is_active ? 'Revoca Accesso' : 'Approva & Attiva'}
+                          {member.is_active ? 'Revoca' : 'Attiva'}
                         </button>
                       )}
                     </td>
