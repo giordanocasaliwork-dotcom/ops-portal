@@ -141,26 +141,44 @@ export default function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-neutral-800/60">
                   {logs && logs.length > 0 ? (
-                    logs.map((log: any, idx: number) => (
-                      <tr key={log.id || idx}>
-                        <td className="py-2 pr-4 text-neutral-400">
-                          {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
-                        </td>
-                        <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
-                        <td className="py-2 pr-4 text-neutral-300">{log.action}</td>
-                        <td
-                          className={`py-2 font-semibold ${
-                            log.status === 'DENIED'
-                              ? 'text-red-400'
-                              : log.status === 'PENDING'
-                              ? 'text-amber-400'
-                              : 'text-emerald-400'
-                          }`}
-                        >
-                          {log.status}
-                        </td>
-                      </tr>
-                    ))
+                    logs.map((log: any, idx: number) => {
+                      const gpsMatch = String(log.action || '').match(/@\s*(-?\d+\.\d+),\s*(-?\d+\.\d+)/)
+
+                      return (
+                        <tr key={log.id || idx}>
+                          <td className="py-2 pr-4 text-neutral-400">
+                            {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
+                          </td>
+                          <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
+                          <td className="py-2 pr-4 text-neutral-300">
+                            <span>{log.action}</span>
+                            {gpsMatch && (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${gpsMatch[1]},${gpsMatch[2]}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 inline-block text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-950/70 hover:bg-sky-900 text-sky-300 border border-sky-700 transition"
+                              >
+                                Maps ↗
+                              </a>
+                            )}
+                          </td>
+                          <td
+                            className={`py-2 font-semibold ${
+                              log.status === 'DENIED'
+                                ? 'text-red-400'
+                                : log.status === 'PENDING'
+                                ? 'text-amber-400'
+                                : log.status === 'CHECK-IN'
+                                ? 'text-sky-400'
+                                : 'text-emerald-400'
+                            }`}
+                          >
+                            {log.status}
+                          </td>
+                        </tr>
+                      )
+                    })
                   ) : (
                     <tr>
                       <td colSpan={4} className="py-4 text-neutral-500">
