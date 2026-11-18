@@ -108,6 +108,42 @@ export default function MissionBoard({
   const [vehPlate, setVehPlate] = useState('')
   const [vehCategory, setVehCategory] = useState('Executive')
 
+  const buildMapsSearchUrl = (query: string) =>
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+
+  const buildMapsRouteUrl = (origin: string, destination: string) =>
+    `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+
+  const renderMapEntries = (rawText: string | null, emptyFallback: string) => {
+    if (!rawText || !rawText.trim()) {
+      return <div className="text-neutral-400">{emptyFallback}</div>
+    }
+
+    const entries = rawText
+      .split(/\n|;/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    return (
+      <div className="space-y-1.5">
+        {entries.map((entry, idx) => (
+          <div key={idx} className="flex items-start justify-between gap-2">
+            <span className="text-neutral-200">{entry}</span>
+            <a
+              href={buildMapsSearchUrl(entry)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+              title="Apri punto su Google Maps"
+            >
+              Maps ↗
+            </a>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const loadAssets = useCallback(async () => {
     const [{ data: opsData }, { data: vehData }, { data: riskData }] = await Promise.all([
       supabase
@@ -238,6 +274,7 @@ export default function MissionBoard({
       `BRIEFING OPERATIVO • ${mission.client_vip.toUpperCase()}`,
       `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
       `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Rotta Maps: ${buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}`,
       `Assetto: ${mission.assigned_vehicle} | Op: ${formatOperatorLabel(mission.assigned_operator_id)}`,
       `Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
       risk?.choke_points ? `Choke Points: ${risk.choke_points}` : null,
@@ -902,9 +939,36 @@ export default function MissionBoard({
                       {formatDateTime(mission.start_time)} → {formatDateTime(mission.end_time)}
                     </div>
 
-                    <div className="text-neutral-300">
-                      <span className="text-neutral-500">Itinerario:</span> {mission.pickup_point}{' '}
-                      <span className="text-emerald-400 font-bold">→</span> {mission.dropoff_point}
+                    <div className="flex flex-wrap items-center gap-1.5 text-neutral-300">
+                      <span className="text-neutral-500">Itinerario:</span>
+                      <a
+                        href={buildMapsSearchUrl(mission.pickup_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
+                        title="Apri Pick-up su Google Maps"
+                      >
+                        {mission.pickup_point}
+                      </a>
+                      <span className="text-emerald-400 font-bold">→</span>
+                      <a
+                        href={buildMapsSearchUrl(mission.dropoff_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
+                        title="Apri Drop-off su Google Maps"
+                      >
+                        {mission.dropoff_point}
+                      </a>
+                      <a
+                        href={buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                        title="Calcola rotta completa su Google Maps"
+                      >
+                        Rotta Maps ↗
+                      </a>
                     </div>
 
                     {mission.notes && (
@@ -1069,7 +1133,7 @@ export default function MissionBoard({
 
                           <div>
                             <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                              Safe Havens & Presidi FFOO
+                              Safe Havens & Presidi FFOO (uno per riga per link Maps)
                             </label>
                             <textarea
                               rows={2}
@@ -1080,14 +1144,14 @@ export default function MissionBoard({
                                   safe_havens: e.target.value,
                                 }))
                               }
-                              placeholder="Stazioni Carabinieri, Commissariati PS, hotel presidiati"
+                              placeholder="Es. Stazione Carabinieri Valentano&#10;Commissariato PS Viterbo"
                               className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
                             />
                           </div>
 
                           <div>
                             <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                              Strutture Sanitarie / DEA di Riferimento
+                              Strutture Sanitarie / DEA (una per riga per link Maps)
                             </label>
                             <textarea
                               rows={2}
@@ -1098,7 +1162,7 @@ export default function MissionBoard({
                                   medical_facilities: e.target.value,
                                 }))
                               }
-                              placeholder="Pronto Soccorso DEA I/II Livello piu vicino e tempi"
+                              placeholder="Es. Ospedale Belcolle Viterbo DEA I Livello"
                               className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
                             />
                           </div>
@@ -1153,21 +1217,20 @@ export default function MissionBoard({
                         </div>
 
                         <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-                          <div className="text-[10px] uppercase text-emerald-500 font-bold mb-1">
+                          <div className="text-[10px] uppercase text-emerald-500 font-bold mb-1.5">
                             Safe Havens & Presidi FFOO
                           </div>
-                          <div className="text-neutral-200 whitespace-pre-line">
-                            {risk.safe_havens || 'Nessun safe haven censito.'}
-                          </div>
+                          {renderMapEntries(risk.safe_havens, 'Nessun safe haven censito.')}
                         </div>
 
                         <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1.5">
                             Strutture Sanitarie / DEA
                           </div>
-                          <div className="text-neutral-200 whitespace-pre-line">
-                            {risk.medical_facilities || 'Nessuna struttura sanitaria indicata.'}
-                          </div>
+                          {renderMapEntries(
+                            risk.medical_facilities,
+                            'Nessuna struttura sanitaria indicata.'
+                          )}
                         </div>
 
                         <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
