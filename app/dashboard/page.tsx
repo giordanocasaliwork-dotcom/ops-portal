@@ -1,6 +1,6 @@
  'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
@@ -14,6 +14,28 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string>('operator')
   const [missions, setMissions] = useState<Mission[]>([])
   const [logs, setLogs] = useState<any[]>([])
+  const [dismissedSosId, setDismissedSosId] = useState<string | null>(null)
+
+  const extractGpsCoords = (actionText: string): string | null => {
+    const atIdx = actionText.indexOf('@ ')
+    if (atIdx === -1) return null
+    const afterAt = actionText.slice(atIdx + 2)
+    const endIdx = afterAt.indexOf(' (')
+    const coords = endIdx === -1 ? afterAt.trim() : afterAt.slice(0, endIdx).trim()
+    return coords.includes(',') ? coords : null
+  }
+
+  const refreshAuditLogs = useCallback(async () => {
+    const { data: logsData } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(12)
+
+    if (logsData) {
+      setLogs(logsData)
+    }
+  }, [supabase])
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -50,20 +72,22 @@ export default function DashboardPage() {
       setMissions((missionsData as Mission[]) || [])
 
       if (adminFlag) {
-        const { data: logsData } = await supabase
-          .from('audit_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(10)
-
-        setLogs(logsData || [])
+        await refreshAuditLogs()
       }
 
       setLoading(false)
     }
 
     loadDashboard()
-  }, [supabase, router])
+  }, [supabase, router, refreshAuditLogs])
+
+  useEffect(() => {
+    if (role.toLowerCase() !== 'admin') return
+    const interval = setInterval(() => {
+      refreshAuditLogs()
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [role, refreshAuditLogs])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -79,10 +103,60 @@ export default function DashboardPage() {
   }
 
   const isAdmin = role.toLowerCase() === 'admin'
+  const latestSos = isAdmin ? logs.find((item: any) => item.status === 'SOS') : null
+  const activeSosBanner =
+    latestSos && String(latestSos.id || latestSos.created_at) !== dismissedSosId
+      ? latestSos
+      : null
+  const activeSosCoords = activeSosBanner
+    ? extractGpsCoords(String(activeSosBanner.action || ''))
+    : null
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
       <div className="max-w-5xl mx-auto space-y-6">
+        {activeSosBanner && (
+          <div className="bg-red-950/90 border-2 border-red-500 rounded-lg p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[11px] font-bold uppercase animate-pulse">
+                  ALLERTA EMERGENZA SOS
+                </span>
+                <span className="text-xs text-red-200">
+                  {activeSosBanner.created_at
+                    ? new Date(activeSosBanner.created_at).toLocaleString('it-IT')
+                    : ''}
+                </span>
+              </div>
+              <div className="text-xs font-semibold text-white">
+                {activeSosBanner.action}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {activeSosCoords && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeSosCoords)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white hover:bg-neutral-200 text-red-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
+                >
+                  Posizione SOS Maps &nearr;
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  setDismissedSosId(String(activeSosBanner.id || activeSosBanner.created_at))
+                }
+                className="bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-600 text-xs uppercase px-3 py-1.5 rounded transition"
+              >
+                Silenzia Avviso
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
             <div>
@@ -122,13 +196,23 @@ export default function DashboardPage() {
           isAdmin={isAdmin}
           userEmail={user.email || ''}
           userId={user.id}
+          onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
         />
 
         {isAdmin && (
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-200 mb-4">
-              Audit Log • Ultimi Accessi e Azioni
-            </h2>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-200">
+                Audit Log • Ultimi Accessi e Azioni
+              </h2>
+              <button
+                type="button"
+                onClick={refreshAuditLogs}
+                className="text-[11px] uppercase px-2.5 py-1 rounded bg-neutral-950 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 transition"
+              >
+                Aggiorna Log
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-neutral-800 text-neutral-500 uppercase">
@@ -142,30 +226,41 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-neutral-800/60">
                   {logs && logs.length > 0 ? (
                     logs.map((log: any, idx: number) => {
-                      const gpsMatch = String(log.action || '').match(/@\s*(-?\d+\.\d+),\s*(-?\d+\.\d+)/)
+                      const actionStr = String(log.action || '')
+                      const coords = extractGpsCoords(actionStr)
+                      const isSosRow = log.status === 'SOS'
 
                       return (
-                        <tr key={log.id || idx}>
+                        <tr key={log.id || idx} className={isSosRow ? 'bg-red-950/35' : ''}>
                           <td className="py-2 pr-4 text-neutral-400">
                             {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
                           </td>
                           <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
                           <td className="py-2 pr-4 text-neutral-300">
-                            <span>{log.action}</span>
-                            {gpsMatch && (
+                            <span className={isSosRow ? 'text-red-200 font-semibold' : ''}>
+                              {actionStr}
+                            </span>
+                            {coords && (
                               <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${gpsMatch[1]},${gpsMatch[2]}`}
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="ml-2 inline-block text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-950/70 hover:bg-sky-900 text-sky-300 border border-sky-700 transition"
+                                className={
+                                  'ml-2 inline-block text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border transition ' +
+                                  (isSosRow
+                                    ? 'bg-red-900/80 hover:bg-red-800 text-white border-red-500'
+                                    : 'bg-sky-950/70 hover:bg-sky-900 text-sky-300 border-sky-700')
+                                }
                               >
-                                Maps ↗
+                                Maps &nearr;
                               </a>
                             )}
                           </td>
                           <td
                             className={`py-2 font-semibold ${
-                              log.status === 'DENIED'
+                              isSosRow
+                                ? 'text-red-400 font-bold'
+                                : log.status === 'DENIED'
                                 ? 'text-red-400'
                                 : log.status === 'PENDING'
                                 ? 'text-amber-400'
