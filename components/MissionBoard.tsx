@@ -84,11 +84,9 @@ export default function MissionBoard({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Stati Check-in GPS
   const [checkingInId, setCheckingInId] = useState<string | null>(null)
   const [lastCheckIns, setLastCheckIns] = useState<Record<string, GpsCheckInRecord>>({})
 
-  // Stati cassetto Risk Assessment & Safe Havens
   const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null)
   const [copiedMissionId, setCopiedMissionId] = useState<string | null>(null)
@@ -102,7 +100,6 @@ export default function MissionBoard({
     emergency_contacts: '',
   })
 
-  // Form Nuova Missione
   const [clientVip, setClientVip] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
@@ -113,7 +110,6 @@ export default function MissionBoard({
   const [manualVehicle, setManualVehicle] = useState('')
   const [notes, setNotes] = useState('')
 
-  // Form Nuovo Veicolo Flotta
   const [vehCallsign, setVehCallsign] = useState('')
   const [vehModel, setVehModel] = useState('')
   const [vehPlate, setVehPlate] = useState('')
@@ -125,34 +121,12 @@ export default function MissionBoard({
   const buildMapsRouteUrl = (origin: string, destination: string) =>
     `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
 
-  const renderMapEntries = (rawText: string | null, emptyFallback: string) => {
-    if (!rawText || !rawText.trim()) {
-      return <div className="text-neutral-400">{emptyFallback}</div>
-    }
-
-    const entries = rawText
+  const parseEntries = (rawText: string | null): string[] => {
+    if (!rawText || !rawText.trim()) return []
+    return rawText
       .split(/\n|;/)
       .map((item) => item.trim())
       .filter(Boolean)
-
-    return (
-      <div className="space-y-1.5">
-        {entries.map((entry, idx) => (
-          <div key={idx} className="flex items-start justify-between gap-2">
-            <span className="text-neutral-200">{entry}</span>
-            <a
-              href={buildMapsSearchUrl(entry)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
-              title="Apri punto su Google Maps"
-            >
-              Maps ↗
-            </a>
-          </div>
-        ))}
-      </div>
-    )
   }
 
   const loadAssets = useCallback(async () => {
@@ -215,7 +189,7 @@ export default function MissionBoard({
         const { error: logErr } = await supabase.from('audit_logs').insert([
           {
             user_email: userEmail,
-            action: `CHECKIN_GPS ${opTag} (${mission.client_vip} • ${mission.status.toUpperCase()}) @ ${lat}, ${lng} (±${accuracy}m)`,
+            action: `CHECKIN_GPS ${opTag} (${mission.client_vip} - ${mission.status.toUpperCase()}) @ ${lat}, ${lng} (${accuracy}m)`,
             status: 'CHECK-IN',
           },
         ])
@@ -346,7 +320,7 @@ export default function MissionBoard({
 
   const handleCopyBriefing = async (mission: Mission, risk?: RiskAssessment) => {
     const lines = [
-      `BRIEFING OPERATIVO • ${mission.client_vip.toUpperCase()}`,
+      `BRIEFING OPERATIVO - ${mission.client_vip.toUpperCase()}`,
       `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
       `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
       `Rotta Maps: ${buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}`,
@@ -633,7 +607,7 @@ export default function MissionBoard({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
-            Registro Missioni, Flotta & Risk Assessment
+            Registro Missioni, Flotta &amp; Risk Assessment
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
             Pianificazione movimenti, assegnazione callsign, check-in GPS e safe havens
@@ -705,11 +679,10 @@ export default function MissionBoard({
         </div>
       )}
 
-      {/* PANNELLO GESTIONE FLOTTA (ADMIN) */}
       {isAdmin && showFleet && (
         <div className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4">
           <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
-            Registro Flotta & Assetti Mobili
+            Registro Flotta &amp; Assetti Mobili
           </div>
 
           <form onSubmit={handleAddVehicle} className="grid grid-cols-1 sm:grid-cols-5 gap-3">
@@ -797,7 +770,6 @@ export default function MissionBoard({
         </div>
       )}
 
-      {/* FORM NUOVA MISSIONE (ADMIN) */}
       {isAdmin && showForm && (
         <form
           onSubmit={handleCreateMission}
@@ -855,7 +827,7 @@ export default function MissionBoard({
                   <option value="">-- Seleziona veicolo dal registro --</option>
                   {vehicles.map((v) => (
                     <option key={v.id} value={v.id}>
-                      [{v.callsign}] {v.model} • {v.plate} ({v.category})
+                      [{v.callsign}] {v.model} - {v.plate} ({v.category})
                     </option>
                   ))}
                 </select>
@@ -895,3 +867,436 @@ export default function MissionBoard({
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
                   className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Punto di Prelievo (Pick-up) *
+              </label>
+              <input
+                type="text"
+                required
+                value={pickupPoint}
+                onChange={(e) => setPickupPoint(e.target.value)}
+                placeholder="Indirizzo, terminal o coordinate"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Punto di Rilascio (Drop-off) *
+              </label>
+              <input
+                type="text"
+                required
+                value={dropoffPoint}
+                onChange={(e) => setDropoffPoint(e.target.value)}
+                placeholder="Destinazione o punto di rilascio"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              Note Tattiche / Itinerario Alternativo
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Eventuali criticita percorso, safe haven o referenti in loco"
+              className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase tracking-wider px-5 py-2 rounded transition disabled:opacity-50"
+            >
+              {loading ? 'Registrazione...' : 'Conferma e Registra Missione'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="mt-5 space-y-3">
+        {filteredMissions.length > 0 ? (
+          filteredMissions.map((mission) => {
+            const isAssignedToMe = mission.assigned_operator_id === userId
+            const risk = riskMap[mission.id]
+            const isExpanded = expandedRiskId === mission.id
+            const isEditingRisk = editingRiskId === mission.id
+            const isCheckingIn = checkingInId === mission.id
+            const lastCheckIn = lastCheckIns[mission.id]
+            const safeHavenEntries = parseEntries(risk?.safe_havens || null)
+            const medicalEntries = parseEntries(risk?.medical_facilities || null)
+
+            return (
+              <div
+                key={mission.id}
+                className={
+                  'bg-neutral-950 border rounded-lg p-4 space-y-4 ' +
+                  (isAssignedToMe ? 'border-emerald-800/80' : 'border-neutral-800/90')
+                }
+              >
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          statusBadge(mission.status)
+                        }
+                      >
+                        {mission.status}
+                      </span>
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          threatBadge(risk?.threat_level)
+                        }
+                      >
+                        {risk ? `Rischio: ${risk.threat_level}` : 'Rischio: N/D'}
+                      </span>
+                      <span className="text-sm font-bold text-neutral-100 uppercase tracking-wide">
+                        {mission.client_vip}
+                      </span>
+                      <span className="text-neutral-600">|</span>
+                      <span className="text-neutral-300 font-semibold">
+                        Mezzo: {mission.assigned_vehicle}
+                      </span>
+                      <span className="text-neutral-600">|</span>
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded text-[11px] font-semibold ' +
+                          (mission.assigned_operator_id
+                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/70'
+                            : 'bg-neutral-900 text-neutral-400 border border-neutral-800')
+                        }
+                      >
+                        Op: {formatOperatorLabel(mission.assigned_operator_id)}
+                      </span>
+                    </div>
+
+                    <div className="text-neutral-400">
+                      <span className="text-neutral-500">Finestra:</span>{' '}
+                      {formatDateTime(mission.start_time)} &rarr; {formatDateTime(mission.end_time)}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 text-neutral-300">
+                      <span className="text-neutral-500">Itinerario:</span>
+                      <a
+                        href={buildMapsSearchUrl(mission.pickup_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
+                        title="Apri Pick-up su Google Maps"
+                      >
+                        {mission.pickup_point}
+                      </a>
+                      <span className="text-emerald-400 font-bold">&rarr;</span>
+                      <a
+                        href={buildMapsSearchUrl(mission.dropoff_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
+                        title="Apri Drop-off su Google Maps"
+                      >
+                        {mission.dropoff_point}
+                      </a>
+                      <a
+                        href={buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                        title="Calcola rotta completa su Google Maps"
+                      >
+                        Rotta Maps &nearr;
+                      </a>
+                    </div>
+
+                    {mission.notes && (
+                      <div className="text-neutral-400 italic pt-0.5">
+                        Note: {mission.notes}
+                      </div>
+                    )}
+
+                    {lastCheckIn && (
+                      <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px] text-sky-300">
+                        <span className="px-1.5 py-0.5 rounded bg-sky-950/70 border border-sky-800 font-semibold uppercase text-[10px]">
+                          Check-in GPS OK {lastCheckIn.time}
+                        </span>
+                        <span>
+                          {lastCheckIn.lat}, {lastCheckIn.lng} ({lastCheckIn.accuracy}m)
+                        </span>
+                        <a
+                          href={buildMapsSearchUrl(`${lastCheckIn.lat},${lastCheckIn.lng}`)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline decoration-sky-600 hover:text-sky-200 font-semibold"
+                        >
+                          Vedi su Maps &nearr;
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                    <button
+                      type="button"
+                      disabled={isCheckingIn}
+                      onClick={() => handleGpsCheckIn(mission)}
+                      title="Invia posizione GPS e stato corrente nell'Audit Log"
+                      className="px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition bg-sky-950/60 hover:bg-sky-900/70 text-sky-300 border-sky-700 disabled:opacity-50"
+                    >
+                      {isCheckingIn ? 'Rilevamento GPS...' : 'Check-in GPS'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleRiskDrawer(mission.id)}
+                      className={
+                        'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
+                        (isExpanded
+                          ? 'bg-neutral-200 text-neutral-950 border-neutral-200'
+                          : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-800/80')
+                      }
+                    >
+                      {isExpanded ? 'Chiudi Scheda' : 'Risk & Safe Havens'}
+                    </button>
+
+                    {isAdmin && (
+                      <select
+                        aria-label="Assegna operatore"
+                        value={mission.assigned_operator_id || ''}
+                        onChange={(e) =>
+                          handleReassignOperator(mission.id, mission.client_vip, e.target.value)
+                        }
+                        className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                      >
+                        <option value="">Op: Non assegnato</option>
+                        {operators.map((op) => (
+                          <option key={op.id} value={op.id}>
+                            {op.callsign ? `[${op.callsign}] ` : ''}
+                            {op.full_name || op.email}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <select
+                      aria-label="Stato missione"
+                      value={mission.status}
+                      onChange={(e) =>
+                        handleStatusChange(
+                          mission.id,
+                          mission.client_vip,
+                          e.target.value as Mission['status']
+                        )
+                      }
+                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs uppercase rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                    >
+                      <option value="pianificata">Pianificata</option>
+                      <option value="in corso">In Corso</option>
+                      <option value="chiusa">Chiusa</option>
+                    </select>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMission(mission.id, mission.client_vip)}
+                        title="Elimina missione"
+                        className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                      >
+                        Elimina
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="border-t border-neutral-800 pt-4 bg-neutral-900/60 rounded-lg p-4 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs uppercase tracking-wider font-bold text-emerald-400">
+                        Scheda Intelligence - Risk Assessment &amp; Safe Havens
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBriefing(mission, risk)}
+                          className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-[11px] uppercase px-3 py-1 rounded transition"
+                        >
+                          {copiedMissionId === mission.id ? 'Briefing Copiato' : 'Copia Briefing'}
+                        </button>
+                        {isAdmin && !isEditingRisk && (
+                          <button
+                            type="button"
+                            onClick={() => startEditingRisk(mission.id)}
+                            className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
+                          >
+                            {risk ? 'Modifica Scheda' : 'Compila Scheda'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isAdmin && isEditingRisk ? (
+                      <form
+                        onSubmit={(e) => handleSaveRisk(e, mission)}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Livello Minaccia Stimato *
+                            </label>
+                            <select
+                              value={riskDraft.threat_level}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  threat_level: e.target.value as ThreatLevel,
+                                }))
+                              }
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                            >
+                              <option value="LOW">LOW (Basso - Ordinario)</option>
+                              <option value="MODERATE">MODERATE (Moderato - Attenzione)</option>
+                              <option value="HIGH">HIGH (Alto - Protocolli Rafforzati)</option>
+                              <option value="CRITICAL">CRITICAL (Critico - Massima Allerta)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Contatti Emergenza / Sala Operativa
+                            </label>
+                            <input
+                              type="text"
+                              value={riskDraft.emergency_contacts || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  emergency_contacts: e.target.value,
+                                }))
+                              }
+                              placeholder="Es. NUE 112 - Centrale Operativa - Referente Location"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Choke Points &amp; Criticita Tratta
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.choke_points || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  choke_points: e.target.value,
+                                }))
+                              }
+                              placeholder="Svincoli congestionati, ZTL, cantieri, aree esposte"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Safe Havens &amp; Presidi FFOO (uno per riga per link Maps)
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.safe_havens || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  safe_havens: e.target.value,
+                                }))
+                              }
+                              placeholder="Es. Stazione Carabinieri Valentano"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Strutture Sanitarie / DEA (uno per riga per link Maps)
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.medical_facilities || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  medical_facilities: e.target.value,
+                                }))
+                              }
+                              placeholder="Es. Ospedale Belcolle Viterbo DEA I Livello"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Itinerario Alternativo / Esfiltrazione
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.evacuation_route || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  evacuation_route: e.target.value,
+                                }))
+                              }
+                              placeholder="Percorso secondario in caso di blocco asse principale"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                          {risk && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingRiskId(null)}
+                              className="bg-neutral-950 text-neutral-400 border border-neutral-700 text-xs uppercase px-3 py-1.5 rounded"
+                            >
+                              Annulla
+                            </button>
+                          )}
+                          <button
+                            type="submit"
+                            disabled={loading}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+                          >
+                            {loading ? 'Salvataggio...' : 'Salva Scheda Risk Assessment'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : risk ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                            Choke Points &amp; Criticita Tratta
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.choke_points || 'Nessuna criticita segnalata.'}
+                          </div>
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-emerald-500 font-bold mb-1.5">
+                            Safe Havens &amp; Presidi FFOO
+                          </div>
+                          {safeHavenEntries.length > 0 ? (
+                            <div className="space-y-1.5">
