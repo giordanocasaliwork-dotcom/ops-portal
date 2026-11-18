@@ -19,6 +19,19 @@ export interface Mission {
   notes?: string | null
 }
 
+export type ThreatLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
+
+export interface RiskAssessment {
+  mission_id: string
+  threat_level: ThreatLevel
+  choke_points: string | null
+  safe_havens: string | null
+  medical_facilities: string | null
+  evacuation_route: string | null
+  emergency_contacts: string | null
+  updated_at?: string
+}
+
 interface OperatorOption {
   id: string
   email: string
@@ -55,6 +68,7 @@ export default function MissionBoard({
   const [missions, setMissions] = useState<Mission[]>(initialMissions)
   const [operators, setOperators] = useState<OperatorOption[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [riskMap, setRiskMap] = useState<Record<string, RiskAssessment>>({})
 
   const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
   const [onlyMine, setOnlyMine] = useState(false)
@@ -62,6 +76,20 @@ export default function MissionBoard({
   const [showFleet, setShowFleet] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Stati cassetto Risk Assessment & Safe Havens
+  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
+  const [editingRiskId, setEditingRiskId] = useState<string | null>(null)
+  const [copiedMissionId, setCopiedMissionId] = useState<string | null>(null)
+  const [riskDraft, setRiskDraft] = useState<RiskAssessment>({
+    mission_id: '',
+    threat_level: 'LOW',
+    choke_points: '',
+    safe_havens: '',
+    medical_facilities: '',
+    evacuation_route: '',
+    emergency_contacts: '',
+  })
 
   // Form Nuova Missione
   const [clientVip, setClientVip] = useState('')
@@ -81,7 +109,7 @@ export default function MissionBoard({
   const [vehCategory, setVehCategory] = useState('Executive')
 
   const loadAssets = useCallback(async () => {
-    const [{ data: opsData }, { data: vehData }] = await Promise.all([
+    const [{ data: opsData }, { data: vehData }, { data: riskData }] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, email, full_name, callsign, is_active')
@@ -91,10 +119,20 @@ export default function MissionBoard({
         .from('vehicles')
         .select('*')
         .order('callsign', { ascending: true }),
+      supabase
+        .from('mission_risk_assessments')
+        .select('*'),
     ])
 
     if (opsData) setOperators(opsData as OperatorOption[])
     if (vehData) setVehicles(vehData as Vehicle[])
+    if (riskData) {
+      const mapped: Record<string, RiskAssessment> = {}
+      ;(riskData as RiskAssessment[]).forEach((item) => {
+        mapped[item.mission_id] = item
+      })
+      setRiskMap(mapped)
+    }
   }, [supabase])
 
   useEffect(() => {
@@ -107,6 +145,116 @@ export default function MissionBoard({
     if (!op) return 'Operatore assegnato'
     const name = op.full_name || op.email
     return op.callsign ? `[${op.callsign}] ${name}` : name
+  }
+
+  const toggleRiskDrawer = (missionId: string) => {
+    if (expandedRiskId === missionId) {
+      setExpandedRiskId(null)
+      setEditingRiskId(null)
+      return
+    }
+    setExpandedRiskId(missionId)
+    const existing = riskMap[missionId]
+    if (!existing && isAdmin) {
+      setEditingRiskId(missionId)
+      setRiskDraft({
+        mission_id: missionId,
+        threat_level: 'LOW',
+        choke_points: '',
+        safe_havens: '',
+        medical_facilities: '',
+        evacuation_route: '',
+        emergency_contacts: '',
+      })
+    } else {
+      setEditingRiskId(null)
+    }
+  }
+
+  const startEditingRisk = (missionId: string) => {
+    const existing = riskMap[missionId]
+    setRiskDraft({
+      mission_id: missionId,
+      threat_level: existing?.threat_level || 'LOW',
+      choke_points: existing?.choke_points || '',
+      safe_havens: existing?.safe_havens || '',
+      medical_facilities: existing?.medical_facilities || '',
+      evacuation_route: existing?.evacuation_route || '',
+      emergency_contacts: existing?.emergency_contacts || '',
+    })
+    setEditingRiskId(missionId)
+  }
+
+  const handleSaveRisk = async (e: React.FormEvent, mission: Mission) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const payload = {
+        mission_id: mission.id,
+        threat_level: riskDraft.threat_level,
+        choke_points: riskDraft.choke_points?.trim() || null,
+        safe_havens: riskDraft.safe_havens?.trim() || null,
+        medical_facilities: riskDraft.medical_facilities?.trim() || null,
+        evacuation_route: riskDraft.evacuation_route?.trim() || null,
+        emergency_contacts: riskDraft.emergency_contacts?.trim() || null,
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }
+
+      const { data, error: upsertErr } = await supabase
+        .from('mission_risk_assessments')
+        .upsert(payload, { onConflict: 'mission_id' })
+        .select()
+        .single()
+
+      if (upsertErr) throw upsertErr
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `RISK_ASSESSMENT_UPDATE (${mission.client_vip}) -> ${riskDraft.threat_level}`,
+          status: 'SUCCESS',
+        },
+      ])
+
+      if (data) {
+        setRiskMap((prev) => ({
+          ...prev,
+          [mission.id]: data as RiskAssessment,
+        }))
+      }
+      setEditingRiskId(null)
+    } catch (err: any) {
+      setError(err.message || 'Errore salvataggio scheda Risk Assessment.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCopyBriefing = async (mission: Mission, risk?: RiskAssessment) => {
+    const lines = [
+      `BRIEFING OPERATIVO • ${mission.client_vip.toUpperCase()}`,
+      `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
+      `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Assetto: ${mission.assigned_vehicle} | Op: ${formatOperatorLabel(mission.assigned_operator_id)}`,
+      `Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
+      risk?.choke_points ? `Choke Points: ${risk.choke_points}` : null,
+      risk?.safe_havens ? `Safe Havens: ${risk.safe_havens}` : null,
+      risk?.medical_facilities ? `Strutture Sanitarie / DEA: ${risk.medical_facilities}` : null,
+      risk?.evacuation_route ? `Esfiltrazione / Alt. Route: ${risk.evacuation_route}` : null,
+      risk?.emergency_contacts ? `Contatti Emergenza: ${risk.emergency_contacts}` : null,
+      mission.notes ? `Note Tattiche: ${mission.notes}` : null,
+    ].filter(Boolean)
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      setCopiedMissionId(mission.id)
+      setTimeout(() => setCopiedMissionId(null), 2000)
+    } catch {
+      setError('Impossibile copiare il briefing negli appunti.')
+    }
   }
 
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -353,15 +501,30 @@ export default function MissionBoard({
     }
   }
 
+  const threatBadge = (level?: ThreatLevel) => {
+    switch (level) {
+      case 'CRITICAL':
+        return 'bg-red-950 text-red-300 border-red-700'
+      case 'HIGH':
+        return 'bg-orange-950/80 text-orange-300 border-orange-700'
+      case 'MODERATE':
+        return 'bg-amber-950/70 text-amber-300 border-amber-700'
+      case 'LOW':
+        return 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
+      default:
+        return 'bg-neutral-900 text-neutral-500 border-neutral-800'
+    }
+  }
+
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
-            Registro Missioni, Operatori & Flotta
+            Registro Missioni, Flotta & Risk Assessment
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Pianificazione movimenti, assegnazione callsign e assetti mobili
+            Pianificazione movimenti, assegnazione callsign, valutazione minacce e safe havens
           </p>
         </div>
 
@@ -683,110 +846,362 @@ export default function MissionBoard({
         {filteredMissions.length > 0 ? (
           filteredMissions.map((mission) => {
             const isAssignedToMe = mission.assigned_operator_id === userId
+            const risk = riskMap[mission.id]
+            const isExpanded = expandedRiskId === mission.id
+            const isEditingRisk = editingRiskId === mission.id
 
             return (
               <div
                 key={mission.id}
                 className={
-                  'bg-neutral-950 border rounded-lg p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 ' +
+                  'bg-neutral-950 border rounded-lg p-4 space-y-4 ' +
                   (isAssignedToMe ? 'border-emerald-800/80' : 'border-neutral-800/90')
                 }
               >
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span
-                      className={
-                        'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
-                        statusBadge(mission.status)
-                      }
-                    >
-                      {mission.status}
-                    </span>
-                    <span className="text-sm font-bold text-neutral-100 uppercase tracking-wide">
-                      {mission.client_vip}
-                    </span>
-                    <span className="text-neutral-600">•</span>
-                    <span className="text-neutral-300 font-semibold">
-                      Mezzo: {mission.assigned_vehicle}
-                    </span>
-                    <span className="text-neutral-600">•</span>
-                    <span
-                      className={
-                        'px-2 py-0.5 rounded text-[11px] font-semibold ' +
-                        (mission.assigned_operator_id
-                          ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/70'
-                          : 'bg-neutral-900 text-neutral-400 border border-neutral-800')
-                      }
-                    >
-                      Op: {formatOperatorLabel(mission.assigned_operator_id)}
-                    </span>
-                  </div>
-
-                  <div className="text-neutral-400">
-                    <span className="text-neutral-500">Finestra:</span>{' '}
-                    {formatDateTime(mission.start_time)} → {formatDateTime(mission.end_time)}
-                  </div>
-
-                  <div className="text-neutral-300">
-                    <span className="text-neutral-500">Itinerario:</span> {mission.pickup_point}{' '}
-                    <span className="text-emerald-400 font-bold">→</span> {mission.dropoff_point}
-                  </div>
-
-                  {mission.notes && (
-                    <div className="text-neutral-400 italic pt-0.5">
-                      Note: {mission.notes}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          statusBadge(mission.status)
+                        }
+                      >
+                        {mission.status}
+                      </span>
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          threatBadge(risk?.threat_level)
+                        }
+                      >
+                        {risk ? `Rischio: ${risk.threat_level}` : 'Rischio: N/D'}
+                      </span>
+                      <span className="text-sm font-bold text-neutral-100 uppercase tracking-wide">
+                        {mission.client_vip}
+                      </span>
+                      <span className="text-neutral-600">•</span>
+                      <span className="text-neutral-300 font-semibold">
+                        Mezzo: {mission.assigned_vehicle}
+                      </span>
+                      <span className="text-neutral-600">•</span>
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded text-[11px] font-semibold ' +
+                          (mission.assigned_operator_id
+                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/70'
+                            : 'bg-neutral-900 text-neutral-400 border border-neutral-800')
+                        }
+                      >
+                        Op: {formatOperatorLabel(mission.assigned_operator_id)}
+                      </span>
                     </div>
-                  )}
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
-                  {isAdmin && (
-                    <select
-                      aria-label="Assegna operatore"
-                      value={mission.assigned_operator_id || ''}
-                      onChange={(e) =>
-                        handleReassignOperator(mission.id, mission.client_vip, e.target.value)
-                      }
-                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
-                    >
-                      <option value="">Op: Non assegnato</option>
-                      {operators.map((op) => (
-                        <option key={op.id} value={op.id}>
-                          {op.callsign ? `[${op.callsign}] ` : ''}
-                          {op.full_name || op.email}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                    <div className="text-neutral-400">
+                      <span className="text-neutral-500">Finestra:</span>{' '}
+                      {formatDateTime(mission.start_time)} → {formatDateTime(mission.end_time)}
+                    </div>
 
-                  <select
-                    aria-label="Stato missione"
-                    value={mission.status}
-                    onChange={(e) =>
-                      handleStatusChange(
-                        mission.id,
-                        mission.client_vip,
-                        e.target.value as Mission['status']
-                      )
-                    }
-                    className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs uppercase rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
-                  >
-                    <option value="pianificata">Pianificata</option>
-                    <option value="in corso">In Corso</option>
-                    <option value="chiusa">Chiusa</option>
-                  </select>
+                    <div className="text-neutral-300">
+                      <span className="text-neutral-500">Itinerario:</span> {mission.pickup_point}{' '}
+                      <span className="text-emerald-400 font-bold">→</span> {mission.dropoff_point}
+                    </div>
 
-                  {isAdmin && (
+                    {mission.notes && (
+                      <div className="text-neutral-400 italic pt-0.5">
+                        Note: {mission.notes}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
                     <button
                       type="button"
-                      onClick={() => handleDeleteMission(mission.id, mission.client_vip)}
-                      title="Elimina missione"
-                      className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                      onClick={() => toggleRiskDrawer(mission.id)}
+                      className={
+                        'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
+                        (isExpanded
+                          ? 'bg-neutral-200 text-neutral-950 border-neutral-200'
+                          : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-800/80')
+                      }
                     >
-                      Elimina
+                      {isExpanded ? 'Chiudi Scheda' : 'Risk & Safe Havens'}
                     </button>
-                  )}
+
+                    {isAdmin && (
+                      <select
+                        aria-label="Assegna operatore"
+                        value={mission.assigned_operator_id || ''}
+                        onChange={(e) =>
+                          handleReassignOperator(mission.id, mission.client_vip, e.target.value)
+                        }
+                        className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                      >
+                        <option value="">Op: Non assegnato</option>
+                        {operators.map((op) => (
+                          <option key={op.id} value={op.id}>
+                            {op.callsign ? `[${op.callsign}] ` : ''}
+                            {op.full_name || op.email}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <select
+                      aria-label="Stato missione"
+                      value={mission.status}
+                      onChange={(e) =>
+                        handleStatusChange(
+                          mission.id,
+                          mission.client_vip,
+                          e.target.value as Mission['status']
+                        )
+                      }
+                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs uppercase rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                    >
+                      <option value="pianificata">Pianificata</option>
+                      <option value="in corso">In Corso</option>
+                      <option value="chiusa">Chiusa</option>
+                    </select>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMission(mission.id, mission.client_vip)}
+                        title="Elimina missione"
+                        className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                      >
+                        Elimina
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* CASSETTO OPERATIVO RISK ASSESSMENT & SAFE HAVENS */}
+                {isExpanded && (
+                  <div className="border-t border-neutral-800 pt-4 bg-neutral-900/60 rounded-lg p-4 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs uppercase tracking-wider font-bold text-emerald-400">
+                        Scheda Intelligence • Risk Assessment & Safe Havens
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBriefing(mission, risk)}
+                          className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-[11px] uppercase px-3 py-1 rounded transition"
+                        >
+                          {copiedMissionId === mission.id ? 'Briefing Copiato ✓' : 'Copia Briefing'}
+                        </button>
+                        {isAdmin && !isEditingRisk && (
+                          <button
+                            type="button"
+                            onClick={() => startEditingRisk(mission.id)}
+                            className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
+                          >
+                            {risk ? 'Modifica Scheda' : 'Compila Scheda'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isAdmin && isEditingRisk ? (
+                      <form
+                        onSubmit={(e) => handleSaveRisk(e, mission)}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Livello Minaccia Stimato *
+                            </label>
+                            <select
+                              value={riskDraft.threat_level}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  threat_level: e.target.value as ThreatLevel,
+                                }))
+                              }
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                            >
+                              <option value="LOW">LOW (Basso • Ordinario)</option>
+                              <option value="MODERATE">MODERATE (Moderato • Attenzione)</option>
+                              <option value="HIGH">HIGH (Alto • Scorta / Protocolli Rafforzati)</option>
+                              <option value="CRITICAL">CRITICAL (Critico • Massima Allerta)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Contatti Emergenza / Sala Operativa
+                            </label>
+                            <input
+                              type="text"
+                              value={riskDraft.emergency_contacts || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  emergency_contacts: e.target.value,
+                                }))
+                              }
+                              placeholder="Es. NUE 112 • Centrale Operativa • Referente Location"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Choke Points & Criticita Tratta
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.choke_points || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  choke_points: e.target.value,
+                                }))
+                              }
+                              placeholder="Svincoli congestionati, ZTL, cantieri, aree esposte"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Safe Havens & Presidi FFOO
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.safe_havens || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  safe_havens: e.target.value,
+                                }))
+                              }
+                              placeholder="Stazioni Carabinieri, Commissariati PS, hotel presidiati"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Strutture Sanitarie / DEA di Riferimento
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.medical_facilities || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  medical_facilities: e.target.value,
+                                }))
+                              }
+                              placeholder="Pronto Soccorso DEA I/II Livello piu vicino e tempi"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                              Itinerario Alternativo / Esfiltrazione
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={riskDraft.evacuation_route || ''}
+                              onChange={(e) =>
+                                setRiskDraft((prev) => ({
+                                  ...prev,
+                                  evacuation_route: e.target.value,
+                                }))
+                              }
+                              placeholder="Percorso secondario in caso di blocco asse principale"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                          {risk && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingRiskId(null)}
+                              className="bg-neutral-950 text-neutral-400 border border-neutral-700 text-xs uppercase px-3 py-1.5 rounded"
+                            >
+                              Annulla
+                            </button>
+                          )}
+                          <button
+                            type="submit"
+                            disabled={loading}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+                          >
+                            {loading ? 'Salvataggio...' : 'Salva Scheda Risk Assessment'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : risk ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                            Choke Points & Criticita Tratta
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.choke_points || 'Nessuna criticita segnalata.'}
+                          </div>
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-emerald-500 font-bold mb-1">
+                            Safe Havens & Presidi FFOO
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.safe_havens || 'Nessun safe haven censito.'}
+                          </div>
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                            Strutture Sanitarie / DEA
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.medical_facilities || 'Nessuna struttura sanitaria indicata.'}
+                          </div>
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                            Itinerario Alternativo / Esfiltrazione
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.evacuation_route || 'Nessun itinerario secondario inserito.'}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] uppercase text-neutral-500 font-bold mr-2">
+                              Contatti Emergenza:
+                            </span>
+                            <span className="text-neutral-200">
+                              {risk.emergency_contacts || 'NUE 112 • Sala Operativa'}
+                            </span>
+                          </div>
+                          {risk.updated_at && (
+                            <span className="text-[10px] text-neutral-500">
+                              Aggiornato: {formatDateTime(risk.updated_at)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-500 py-2">
+                        Scheda Risk Assessment non ancora compilata per questa missione.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })
