@@ -56,6 +56,14 @@ interface GpsCheckInRecord {
   accuracy: number
 }
 
+interface RiskDictionary {
+  [missionId: string]: RiskAssessment
+}
+
+interface CheckInDictionary {
+  [missionId: string]: GpsCheckInRecord
+}
+
 interface MissionBoardProps {
   initialMissions: Mission[]
   isAdmin: boolean
@@ -75,7 +83,7 @@ export default function MissionBoard({
   const [missions, setMissions] = useState<Mission[]>(initialMissions)
   const [operators, setOperators] = useState<OperatorOption[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [riskMap, setRiskMap] = useState<Record<string, RiskAssessment>>({})
+  const [riskMap, setRiskMap] = useState<RiskDictionary>({})
 
   const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
   const [onlyMine, setOnlyMine] = useState(false)
@@ -85,7 +93,7 @@ export default function MissionBoard({
   const [error, setError] = useState<string | null>(null)
 
   const [checkingInId, setCheckingInId] = useState<string | null>(null)
-  const [lastCheckIns, setLastCheckIns] = useState<Record<string, GpsCheckInRecord>>({})
+  const [lastCheckIns, setLastCheckIns] = useState<CheckInDictionary>({})
 
   const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null)
@@ -115,43 +123,53 @@ export default function MissionBoard({
   const [vehPlate, setVehPlate] = useState('')
   const [vehCategory, setVehCategory] = useState('Executive')
 
-  const buildMapsSearchUrl = (query: string) =>
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+  const buildMapsSearchUrl = (query: string) => {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+  }
 
-  const buildMapsRouteUrl = (origin: string, destination: string) =>
-    `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+  const buildMapsRouteUrl = (origin: string, destination: string) => {
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+  }
 
   const parseEntries = (rawText: string | null): string[] => {
-    if (!rawText || !rawText.trim()) return []
-    return rawText
-      .split(/\n|;/)
+    if (!rawText) return []
+    const trimmed = rawText.trim()
+    if (!trimmed) return []
+    return trimmed
+      .split('\n')
       .map((item) => item.trim())
-      .filter(Boolean)
+      .filter((item) => item.length > 0)
   }
 
   const loadAssets = useCallback(async () => {
-    const [{ data: opsData }, { data: vehData }, { data: riskData }] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, callsign, is_active')
-        .eq('is_active', true)
-        .order('callsign', { ascending: true }),
-      supabase
-        .from('vehicles')
-        .select('*')
-        .order('callsign', { ascending: true }),
-      supabase
-        .from('mission_risk_assessments')
-        .select('*'),
-    ])
+    const opsRes = await supabase
+      .from('profiles')
+      .select('id, email, full_name, callsign, is_active')
+      .eq('is_active', true)
+      .order('callsign', { ascending: true })
 
-    if (opsData) setOperators(opsData as OperatorOption[])
-    if (vehData) setVehicles(vehData as Vehicle[])
-    if (riskData) {
-      const mapped: Record<string, RiskAssessment> = {}
-      ;(riskData as RiskAssessment[]).forEach((item) => {
-        mapped[item.mission_id] = item
-      })
+    const vehRes = await supabase
+      .from('vehicles')
+      .select('*')
+      .order('callsign', { ascending: true })
+
+    const riskRes = await supabase
+      .from('mission_risk_assessments')
+      .select('*')
+
+    if (opsRes.data) {
+      setOperators(opsRes.data)
+    }
+    if (vehRes.data) {
+      setVehicles(vehRes.data)
+    }
+    if (riskRes.data) {
+      const mapped: RiskDictionary = {}
+      for (const item of riskRes.data) {
+        if (item && item.mission_id) {
+          mapped[item.mission_id] = item
+        }
+      }
       setRiskMap(mapped)
     }
   }, [supabase])
@@ -307,7 +325,7 @@ export default function MissionBoard({
       if (data) {
         setRiskMap((prev) => ({
           ...prev,
-          [mission.id]: data as RiskAssessment,
+          [mission.id]: data,
         }))
       }
       setEditingRiskId(null)
@@ -446,7 +464,7 @@ export default function MissionBoard({
       ])
 
       if (data) {
-        setMissions((prev) => [data as Mission, ...prev])
+        setMissions((prev) => [data, ...prev])
       }
 
       setClientVip('')
@@ -1300,3 +1318,93 @@ export default function MissionBoard({
                           </div>
                           {safeHavenEntries.length > 0 ? (
                             <div className="space-y-1.5">
+                              {safeHavenEntries.map((entry, idx) => (
+                                <div key={idx} className="flex items-start justify-between gap-2">
+                                  <span className="text-neutral-200">{entry}</span>
+                                  <a
+                                    href={buildMapsSearchUrl(entry)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                                  >
+                                    Maps &nearr;
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-neutral-400">Nessun safe haven censito.</div>
+                          )}
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1.5">
+                            Strutture Sanitarie / DEA
+                          </div>
+                          {medicalEntries.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {medicalEntries.map((entry, idx) => (
+                                <div key={idx} className="flex items-start justify-between gap-2">
+                                  <span className="text-neutral-200">{entry}</span>
+                                  <a
+                                    href={buildMapsSearchUrl(entry)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                                  >
+                                    Maps &nearr;
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-neutral-400">
+                              Nessuna struttura sanitaria indicata.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+                          <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
+                            Itinerario Alternativo / Esfiltrazione
+                          </div>
+                          <div className="text-neutral-200 whitespace-pre-line">
+                            {risk.evacuation_route || 'Nessun itinerario secondario inserito.'}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] uppercase text-neutral-500 font-bold mr-2">
+                              Contatti Emergenza:
+                            </span>
+                            <span className="text-neutral-200">
+                              {risk.emergency_contacts || 'NUE 112 - Sala Operativa'}
+                            </span>
+                          </div>
+                          {risk.updated_at && (
+                            <span className="text-[10px] text-neutral-500">
+                              Aggiornato: {formatDateTime(risk.updated_at)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-500 py-2">
+                        Scheda Risk Assessment non ancora compilata per questa missione.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        ) : (
+          <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
+            Nessuna missione presente per il filtro selezionato.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
