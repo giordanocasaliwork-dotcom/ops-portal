@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
+import ExecutiveAppointments from '../../components/ExecutiveAppointments'
 import ExecutiveHub from '../../components/ExecutiveHub'
 import OperationsControl from '../../components/OperationsControl'
 
@@ -85,14 +86,18 @@ export default function DashboardPage() {
 
       const userRole = String(profile.role || 'operator').trim()
       setRole(userRole)
-      const adminFlag = userRole.toLowerCase() === 'admin'
+      const normalizedRole = userRole.toLowerCase()
+      const adminFlag = normalizedRole === 'admin'
+      const execFlag = normalizedRole === 'executive'
 
-      const { data: missionsData } = await supabase
-        .from('missions')
-        .select('*')
-        .order('start_time', { ascending: true })
+      if (!execFlag) {
+        const { data: missionsData } = await supabase
+          .from('missions')
+          .select('*')
+          .order('start_time', { ascending: true })
 
-      setMissions((missionsData as Mission[]) || [])
+        setMissions((missionsData as Mission[]) || [])
+      }
 
       if (adminFlag) {
         await refreshAuditLogs()
@@ -155,7 +160,11 @@ export default function DashboardPage() {
     setSendingGlobalSos(true)
     setGlobalSosError(null)
 
-    const opTag = callsign ? `[${callsign}]` : user.email || 'OPERATORE'
+    const opTag = callsign
+      ? `[${callsign}]`
+      : role.toLowerCase() === 'executive'
+      ? `[DIREZIONE - ${user.email || 'EXECUTIVE'}]`
+      : user.email || 'OPERATORE'
     const adminFlag = role.toLowerCase() === 'admin'
 
     const dispatchGlobalSos = async (coordsText: string | null, accuracyVal: number | null) => {
@@ -227,7 +236,11 @@ export default function DashboardPage() {
     )
   }
 
-  const isAdmin = role.toLowerCase() === 'admin'
+  const normalizedRole = role.toLowerCase()
+  const isAdmin = normalizedRole === 'admin'
+  const isExecutive = normalizedRole === 'executive'
+  const canAccessExecutivePanels = isAdmin || isExecutive
+
   const latestSos = isAdmin ? logs.find((item: any) => item.status === 'SOS') : null
 
   const isGloballyAcknowledged =
@@ -254,7 +267,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
       <div className="max-w-5xl mx-auto space-y-6">
-        {activeSosBanner && (
+        {isAdmin && activeSosBanner && (
           <div className="bg-red-950/90 border-2 border-red-500 rounded-lg p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -298,15 +311,21 @@ export default function DashboardPage() {
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
             <div>
-              <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">Ops Portal • Dashboard</h1>
-              <p className="text-xs text-neutral-400 mt-1">Area Operativa Riservata • Connessione Sicura</p>
+              <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
+                {isExecutive ? 'Ops Portal • Executive Control Room' : 'Ops Portal • Dashboard'}
+              </h1>
+              <p className="text-xs text-neutral-400 mt-1">
+                {isExecutive
+                  ? 'Area Riservata Direzione • Connessione Sicura'
+                  : 'Area Operativa Riservata • Connessione Sicura'}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 disabled={sendingGlobalSos}
                 onClick={handleGlobalSos}
-                title="Doppio tocco rapido per inviare un allarme SOS generale con posizione GPS"
+                title="Doppio tocco rapido per inviare un allarme SOS con posizione GPS"
                 className={
                   'text-xs uppercase tracking-wider px-4 py-2 rounded transition font-bold border ' +
                   (globalSosConfirm
@@ -349,7 +368,7 @@ export default function DashboardPage() {
             <div className="mt-4 p-3 bg-red-950/60 border border-red-700 rounded flex flex-wrap items-center justify-between gap-2 text-xs text-red-200">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold uppercase text-[10px]">
-                  SOS GENERALE TRASMESSO ({globalSosSent.time})
+                  SOS TRASMESSO ({globalSosSent.time})
                 </span>
                 <span>
                   {globalSosSent.coords
@@ -380,35 +399,52 @@ export default function DashboardPage() {
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
             <p><span className="text-neutral-500">UID:</span> {user.id}</p>
             <p>
-              <span className="text-neutral-500">Operatore:</span>{' '}
+              <span className="text-neutral-500">Utente:</span>{' '}
               {callsign ? `[${callsign}] ` : ''}{user.email}
             </p>
             <p>
-              <span className="text-neutral-500">Ruolo:</span>{' '}
-              <span className="uppercase text-emerald-400 font-bold">{role}</span>
+              <span className="text-neutral-500">Profilo:</span>{' '}
+              <span
+                className={
+                  'uppercase font-bold ' +
+                  (isExecutive ? 'text-amber-300' : 'text-emerald-400')
+                }
+              >
+                {isExecutive ? 'EXECUTIVE • DIREZIONE' : role}
+              </span>
             </p>
           </div>
         </div>
 
-        <MissionBoard
-          initialMissions={missions}
-          isAdmin={isAdmin}
-          userEmail={user.email || ''}
-          userId={user.id}
-          onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
-        />
-
-        {isAdmin && (
-          <ExecutiveHub
+        {canAccessExecutivePanels && (
+          <ExecutiveAppointments
             userEmail={user.email || ''}
-            onAuditUpdated={refreshAuditLogs}
+            userId={user.id}
+            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
           />
         )}
 
-        {isAdmin && (
+        {!isExecutive && (
+          <MissionBoard
+            initialMissions={missions}
+            isAdmin={isAdmin}
+            userEmail={user.email || ''}
+            userId={user.id}
+            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+          />
+        )}
+
+        {canAccessExecutivePanels && (
+          <ExecutiveHub
+            userEmail={user.email || ''}
+            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+          />
+        )}
+
+        {canAccessExecutivePanels && (
           <OperationsControl
             userEmail={user.email || ''}
-            onAuditUpdated={refreshAuditLogs}
+            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
           />
         )}
 
