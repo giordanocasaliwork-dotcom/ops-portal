@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
 import ExecutiveHub from '../../components/ExecutiveHub'
+import OperationsControl from '../../components/OperationsControl'
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -399,6 +400,13 @@ export default function DashboardPage() {
 
         {isAdmin && (
           <ExecutiveHub
+            userEmail={user.email || ''}
+            onAuditUpdated={refreshAuditLogs}
+          />
+        )}
+
+        {isAdmin && (
+          <OperationsControl
             userEmail={user.email || ''}
             onAuditUpdated={refreshAuditLogs}
           />
