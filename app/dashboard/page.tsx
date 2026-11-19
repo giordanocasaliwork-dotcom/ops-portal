@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [missions, setMissions] = useState<Mission[]>([])
   const [logs, setLogs] = useState<any[]>([])
   const [dismissedSosId, setDismissedSosId] = useState<string | null>(null)
+  const [archivingSos, setArchivingSos] = useState(false)
 
   const [globalSosConfirm, setGlobalSosConfirm] = useState(false)
   const [sendingGlobalSos, setSendingGlobalSos] = useState(false)
@@ -26,6 +27,15 @@ export default function DashboardPage() {
     coords: string | null
     accuracy: number | null
   } | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedDismissed = window.localStorage.getItem('ops_dismissed_sos_id')
+      if (savedDismissed) {
+        setDismissedSosId(savedDismissed)
+      }
+    }
+  }, [])
 
   const extractGpsCoords = (actionText: string): string | null => {
     const atIdx = actionText.indexOf('@ ')
@@ -41,7 +51,7 @@ export default function DashboardPage() {
       .from('audit_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(12)
+      .limit(15)
 
     if (logsData) {
       setLogs(logsData)
@@ -108,6 +118,29 @@ export default function DashboardPage() {
     }, 5000)
     return () => clearTimeout(timer)
   }, [globalSosConfirm])
+
+  const handleArchiveSosBanner = async (sosLog: any) => {
+    const sosKey = String(sosLog.id || sosLog.created_at)
+    setDismissedSosId(sosKey)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('ops_dismissed_sos_id', sosKey)
+    }
+
+    if (!user) return
+    setArchivingSos(true)
+    try {
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: user.email || '',
+          action: `SOS_ARCHIVIATO_COMANDO: ${String(sosLog.action || '')}`,
+          status: 'SOS-ACK',
+        },
+      ])
+      await refreshAuditLogs()
+    } finally {
+      setArchivingSos(false)
+    }
+  }
 
   const handleGlobalSos = () => {
     if (!user) return
@@ -195,10 +228,24 @@ export default function DashboardPage() {
 
   const isAdmin = role.toLowerCase() === 'admin'
   const latestSos = isAdmin ? logs.find((item: any) => item.status === 'SOS') : null
+
+  const isGloballyAcknowledged =
+    latestSos &&
+    logs.some(
+      (item: any) =>
+        item.status === 'SOS-ACK' &&
+        item.created_at &&
+        latestSos.created_at &&
+        new Date(item.created_at).getTime() >= new Date(latestSos.created_at).getTime()
+    )
+
   const activeSosBanner =
-    latestSos && String(latestSos.id || latestSos.created_at) !== dismissedSosId
+    latestSos &&
+    !isGloballyAcknowledged &&
+    String(latestSos.id || latestSos.created_at) !== dismissedSosId
       ? latestSos
       : null
+
   const activeSosCoords = activeSosBanner
     ? extractGpsCoords(String(activeSosBanner.action || ''))
     : null
@@ -237,12 +284,11 @@ export default function DashboardPage() {
               )}
               <button
                 type="button"
-                onClick={() =>
-                  setDismissedSosId(String(activeSosBanner.id || activeSosBanner.created_at))
-                }
-                className="bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-600 text-xs uppercase px-3 py-1.5 rounded transition"
+                disabled={archivingSos}
+                onClick={() => handleArchiveSosBanner(activeSosBanner)}
+                className="bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-600 text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
               >
-                Silenzia Avviso
+                {archivingSos ? 'Archiviazione...' : 'Archivia Allerta'}
               </button>
             </div>
           </div>
@@ -419,6 +465,8 @@ export default function DashboardPage() {
                             className={`py-2 font-semibold ${
                               isSosRow
                                 ? 'text-red-400 font-bold'
+                                : log.status === 'SOS-ACK'
+                                ? 'text-amber-300'
                                 : log.status === 'DENIED'
                                 ? 'text-red-400'
                                 : log.status === 'PENDING'
