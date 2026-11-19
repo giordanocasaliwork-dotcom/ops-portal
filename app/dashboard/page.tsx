@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
+import ExecutiveHub from '../../components/ExecutiveHub'
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -349,6 +350,13 @@ export default function DashboardPage() {
           userId={user.id}
           onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
         />
+
+        {isAdmin && (
+          <ExecutiveHub
+            userEmail={user.email || ''}
+            onAuditUpdated={refreshAuditLogs}
+          />
+        )}
 
         {isAdmin && (
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
