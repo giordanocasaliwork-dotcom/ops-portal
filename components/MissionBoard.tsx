@@ -32,6 +32,18 @@ export interface RiskAssessment {
   updated_at?: string
 }
 
+export interface ExecutiveBrief {
+  mission_id: string
+  counterpart_name: string | null
+  counterpart_role: string | null
+  meeting_objective: string | null
+  talking_points: string | null
+  travel_booking_ref: string | null
+  hospitality_details: string | null
+  confidential_notes: string | null
+  updated_at?: string
+}
+
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -47,6 +59,7 @@ interface MissionRiskPanelProps {
   userEmail: string
   userId: string
   onRiskSaved: (missionId: string, updated: RiskAssessment) => void
+  onAuditUpdated?: () => void
 }
 
 function MissionRiskPanel({
@@ -64,6 +77,7 @@ function MissionRiskPanel({
   userEmail,
   userId,
   onRiskSaved,
+  onAuditUpdated,
 }: MissionRiskPanelProps) {
   const supabase = useMemo(() => createClient(), [])
 
@@ -142,6 +156,7 @@ function MissionRiskPanel({
       if (data) {
         onRiskSaved(missionId, data as RiskAssessment)
       }
+      if (onAuditUpdated) onAuditUpdated()
       setEditing(false)
     } catch (err: any) {
       setPanelError(err.message || 'Errore salvataggio scheda Risk Assessment.')
@@ -152,7 +167,7 @@ function MissionRiskPanel({
 
   const handleCopyBriefing = async () => {
     const lines = [
-      `BRIEFING OPERATIVO - ${clientVip.toUpperCase()}`,
+      `BRIEFING LOGISTICO & SICUREZZA - ${clientVip.toUpperCase()}`,
       `Finestra: ${formatDate(startTime)} -> ${formatDate(endTime)}`,
       `Tratta: ${pickupPoint} -> ${dropoffPoint}`,
       `Rotta Maps: ${buildMapsRouteUrl(pickupPoint, dropoffPoint)}`,
@@ -163,7 +178,7 @@ function MissionRiskPanel({
       risk?.medical_facilities ? `Strutture Sanitarie / DEA: ${risk.medical_facilities}` : null,
       risk?.evacuation_route ? `Esfiltrazione / Alt. Route: ${risk.evacuation_route}` : null,
       risk?.emergency_contacts ? `Contatti Emergenza: ${risk.emergency_contacts}` : null,
-      notes ? `Note Tattiche: ${notes}` : null,
+      notes ? `Note Logistica: ${notes}` : null,
     ].filter(Boolean)
 
     try {
@@ -190,7 +205,7 @@ function MissionRiskPanel({
             onClick={handleCopyBriefing}
             className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-[11px] uppercase px-3 py-1 rounded transition"
           >
-            {copied ? 'Briefing Copiato' : 'Copia Briefing'}
+            {copied ? 'Briefing Copiato' : 'Copia Briefing Operativo'}
           </button>
           {isAdmin && !editing && (
             <button
@@ -409,6 +424,345 @@ function MissionRiskPanel({
   )
 }
 
+interface ExecutiveBriefPanelProps {
+  mission: Mission
+  operatorLabel: string
+  risk?: RiskAssessment
+  brief?: ExecutiveBrief
+  userEmail: string
+  userId: string
+  onBriefSaved: (missionId: string, updated: ExecutiveBrief) => void
+  onAuditUpdated?: () => void
+}
+
+function ExecutiveBriefPanel({
+  mission,
+  operatorLabel,
+  risk,
+  brief,
+  userEmail,
+  userId,
+  onBriefSaved,
+  onAuditUpdated,
+}: ExecutiveBriefPanelProps) {
+  const supabase = useMemo(() => createClient(), [])
+
+  const [editing, setEditing] = useState(!brief)
+  const [saving, setSaving] = useState(false)
+  const [copiedExec, setCopiedExec] = useState(false)
+  const [briefError, setBriefError] = useState<string | null>(null)
+
+  const [counterpartName, setCounterpartName] = useState(brief?.counterpart_name || '')
+  const [counterpartRole, setCounterpartRole] = useState(brief?.counterpart_role || '')
+  const [meetingObjective, setMeetingObjective] = useState(brief?.meeting_objective || '')
+  const [talkingPoints, setTalkingPoints] = useState(brief?.talking_points || '')
+  const [travelBookingRef, setTravelBookingRef] = useState(brief?.travel_booking_ref || '')
+  const [hospitalityDetails, setHospitalityDetails] = useState(brief?.hospitality_details || '')
+  const [confidentialNotes, setConfidentialNotes] = useState(brief?.confidential_notes || '')
+
+  const formatDate = (iso: string) => {
+    return new Date(iso).toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const handleSaveBrief = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setBriefError(null)
+
+    try {
+      const payload = {
+        mission_id: mission.id,
+        counterpart_name: counterpartName.trim() || null,
+        counterpart_role: counterpartRole.trim() || null,
+        meeting_objective: meetingObjective.trim() || null,
+        talking_points: talkingPoints.trim() || null,
+        travel_booking_ref: travelBookingRef.trim() || null,
+        hospitality_details: hospitalityDetails.trim() || null,
+        confidential_notes: confidentialNotes.trim() || null,
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }
+
+      const { data, error } = await supabase
+        .from('mission_executive_briefs')
+        .upsert(payload, { onConflict: 'mission_id' })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `EXEC_BRIEF_UPDATE (${mission.client_vip})`,
+          status: 'SUCCESS',
+        },
+      ])
+
+      if (data) {
+        onBriefSaved(mission.id, data as ExecutiveBrief)
+      }
+      if (onAuditUpdated) onAuditUpdated()
+      setEditing(false)
+    } catch (err: any) {
+      setBriefError(err.message || 'Errore salvataggio Dossier Direzionale.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCopyExecutiveBrief = async () => {
+    const lines = [
+      `EXECUTIVE BRIEFING - ${mission.client_vip.toUpperCase()}`,
+      `Orario: ${formatDate(mission.start_time)} -> ${formatDate(mission.end_time)}`,
+      `Spostamento: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Assetto: ${mission.assigned_vehicle} | Ref: ${operatorLabel}`,
+      brief?.counterpart_name
+        ? `Interlocutore: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
+        : null,
+      brief?.meeting_objective ? `Obiettivo Incontro: ${brief.meeting_objective}` : null,
+      brief?.talking_points ? `Talking Points:\n${brief.talking_points}` : null,
+      brief?.travel_booking_ref ? `Travel / PNR: ${brief.travel_booking_ref}` : null,
+      brief?.hospitality_details ? `Ospitalita / Hotel: ${brief.hospitality_details}` : null,
+      brief?.confidential_notes ? `Note Riservate: ${brief.confidential_notes}` : null,
+      risk?.threat_level ? `Livello Rischio Area: ${risk.threat_level}` : null,
+    ].filter(Boolean)
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      setCopiedExec(true)
+      setTimeout(() => setCopiedExec(false), 2000)
+    } catch {
+      setBriefError('Impossibile copiare il Dossier Direzionale.')
+    }
+  }
+
+  return (
+    <div className="border-t border-amber-800/70 pt-4 bg-amber-950/15 rounded-lg p-4 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 text-[10px] font-bold uppercase">
+            SOLO DIREZIONE
+          </span>
+          <span className="text-xs uppercase tracking-wider font-bold text-amber-300">
+            Dossier Incontro &amp; Travel Management
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyExecutiveBrief}
+            className="bg-neutral-950 hover:bg-neutral-800 text-amber-200 border border-amber-800/80 text-[11px] uppercase px-3 py-1 rounded transition"
+          >
+            {copiedExec ? 'Dossier Copiato' : 'Copia per Direzione'}
+          </button>
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="bg-amber-950 hover:bg-amber-900 text-amber-200 border border-amber-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
+            >
+              {brief ? 'Modifica Dossier' : 'Compila Dossier'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {briefError && (
+        <div className="p-2.5 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+          {briefError}
+        </div>
+      )}
+
+      {editing ? (
+        <form onSubmit={handleSaveBrief} className="space-y-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Controparte / Interlocutore Principale
+              </label>
+              <input
+                type="text"
+                value={counterpartName}
+                onChange={(e) => setCounterpartName(e.target.value)}
+                placeholder="Nome e Cognome interlocutore"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Ruolo / Societa / Istituzione
+              </label>
+              <input
+                type="text"
+                value={counterpartRole}
+                onChange={(e) => setCounterpartRole(e.target.value)}
+                placeholder="Es. CEO / Partner / Funzionario"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Travel Booking (Voli / Treni / PNR / Gate)
+              </label>
+              <textarea
+                rows={2}
+                value={travelBookingRef}
+                onChange={(e) => setTravelBookingRef(e.target.value)}
+                placeholder="Es. Volo AZ610 PNR X8Y9Z2 - Fast Track / Lounge"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Ospitalita (Hotel / Check-in / Ristorante Riservato)
+              </label>
+              <textarea
+                rows={2}
+                value={hospitalityDetails}
+                onChange={(e) => setHospitalityDetails(e.target.value)}
+                placeholder="Struttura, codice prenotazione, tavolo riservato, preferenze"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Obiettivo Strategico dell&apos;Incontro
+              </label>
+              <textarea
+                rows={2}
+                value={meetingObjective}
+                onChange={(e) => setMeetingObjective(e.target.value)}
+                placeholder="Esito atteso, firma accordo, negoziazione"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                Talking Points &amp; Punti Sensibili
+              </label>
+              <textarea
+                rows={2}
+                value={talkingPoints}
+                onChange={(e) => setTalkingPoints(e.target.value)}
+                placeholder="Temi chiave da trattare e argomenti da evitare"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase text-amber-400/90 mb-1">
+              Note Riservate Assistente di Direzione (Invisibili agli operatori logistici)
+            </label>
+            <input
+              type="text"
+              value={confidentialNotes}
+              onChange={(e) => setConfidentialNotes(e.target.value)}
+              placeholder="Dettagli sensibili, omaggi protocollo, accorgimenti relazionali"
+              className="w-full bg-neutral-950 border border-amber-900/70 rounded p-2 text-xs text-neutral-100"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            {brief && (
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="bg-neutral-950 text-neutral-400 border border-neutral-700 text-xs uppercase px-3 py-1.5 rounded"
+              >
+                Annulla
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+            >
+              {saving ? 'Salvataggio...' : 'Salva Dossier Direzionale'}
+            </button>
+          </div>
+        </form>
+      ) : brief ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+              Interlocutore &amp; Ruolo
+            </div>
+            <div className="text-neutral-100 font-semibold">
+              {brief.counterpart_name || 'Non specificato'}
+            </div>
+            {brief.counterpart_role && (
+              <div className="text-neutral-400 mt-0.5">{brief.counterpart_role}</div>
+            )}
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+              Obiettivo Strategico
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.meeting_objective || 'Nessun obiettivo registrato.'}
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+              Travel Booking (Voli / Treni / PNR)
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.travel_booking_ref || 'Nessun titolo di viaggio collegato.'}
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+              Ospitalita &amp; Hotel
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.hospitality_details || 'Nessuna prenotazione alberghiera.'}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+              Talking Points &amp; Punti Sensibili
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.talking_points || 'Nessun talking point inserito.'}
+            </div>
+          </div>
+
+          {brief.confidential_notes && (
+            <div className="md:col-span-2 bg-amber-950/30 border border-amber-800/70 rounded p-3">
+              <div className="text-[10px] uppercase text-amber-300 font-bold mb-1">
+                Note Riservate Direzione
+              </div>
+              <div className="text-amber-100">{brief.confidential_notes}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-xs text-neutral-500 py-2">
+          Dossier Direzionale non ancora compilato per questa missione.
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface OperatorOption {
   id: string
   email: string
@@ -461,11 +815,14 @@ export default function MissionBoard({
   const [operators, setOperators] = useState<OperatorOption[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [riskList, setRiskList] = useState<RiskAssessment[]>([])
+  const [briefList, setBriefList] = useState<ExecutiveBrief[]>([])
 
   const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
   const [onlyMine, setOnlyMine] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showFleet, setShowFleet] = useState(false)
+  const [showMorningBrief, setShowMorningBrief] = useState(false)
+  const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -477,6 +834,7 @@ export default function MissionBoard({
   const [sentSosAlerts, setSentSosAlerts] = useState<{ [id: string]: SosAlertRecord }>({})
 
   const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
+  const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
 
   const [clientVip, setClientVip] = useState('')
   const [startTime, setStartTime] = useState('')
@@ -518,7 +876,12 @@ export default function MissionBoard({
     if (opsRes.data) setOperators(opsRes.data)
     if (vehRes.data) setVehicles(vehRes.data)
     if (riskRes.data) setRiskList(riskRes.data)
-  }, [supabase])
+
+    if (isAdmin) {
+      const briefRes = await supabase.from('mission_executive_briefs').select('*')
+      if (briefRes.data) setBriefList(briefRes.data)
+    }
+  }, [supabase, isAdmin])
 
   useEffect(() => {
     loadAssets()
@@ -548,6 +911,96 @@ export default function MissionBoard({
       }
       return [...prev, updated]
     })
+  }
+
+  const handleBriefSaved = (missionId: string, updated: ExecutiveBrief) => {
+    setBriefList((prev) => {
+      const exists = prev.some((b) => b.mission_id === missionId)
+      if (exists) {
+        return prev.map((b) => (b.mission_id === missionId ? updated : b))
+      }
+      return [...prev, updated]
+    })
+  }
+
+  const generateMorningBriefingText = () => {
+    const todayStr = new Date().toLocaleDateString('it-IT', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+    const todayKey = new Date().toDateString()
+
+    const todayMissions = missions.filter(
+      (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+    )
+    const targetMissions =
+      todayMissions.length > 0
+        ? todayMissions
+        : missions.filter((m) => m.status !== 'chiusa')
+
+    const headerLabel =
+      todayMissions.length > 0
+        ? `AGENDA OPERATIVA ODIERNA (${todayMissions.length} movimentazioni)`
+        : `PROSSIME MOVIMENTAZIONI ATTIVE (${targetMissions.length} pianificate)`
+
+    const lines: string[] = [
+      `MORNING BRIEFING DIREZIONE - ${todayStr.toUpperCase()}`,
+      headerLabel,
+      '----------------------------------------',
+    ]
+
+    if (targetMissions.length === 0) {
+      lines.push('Nessuna movimentazione o appuntamento attivo in agenda.')
+    } else {
+      targetMissions.forEach((m, index) => {
+        const risk = riskList.find((r) => r.mission_id === m.id)
+        const brief = briefList.find((b) => b.mission_id === m.id)
+        const startHour = new Date(m.start_time).toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const endHour = new Date(m.end_time).toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+
+        lines.push(`${index + 1}. [${startHour} - ${endHour}] ${m.client_vip.toUpperCase()}`)
+        lines.push(`   Tratta: ${m.pickup_point} -> ${m.dropoff_point}`)
+        lines.push(`   Assetto: ${m.assigned_vehicle} | Op: ${formatOperatorLabel(m.assigned_operator_id)}`)
+        if (brief?.counterpart_name) {
+          lines.push(
+            `   Incontro: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
+          )
+        }
+        if (brief?.meeting_objective) {
+          lines.push(`   Obiettivo: ${brief.meeting_objective}`)
+        }
+        if (brief?.travel_booking_ref) {
+          lines.push(`   Travel/PNR: ${brief.travel_booking_ref}`)
+        }
+        if (brief?.hospitality_details) {
+          lines.push(`   Ospitalita: ${brief.hospitality_details}`)
+        }
+        if (risk?.threat_level) {
+          lines.push(`   Livello Rischio: ${risk.threat_level}`)
+        }
+        lines.push('')
+      })
+    }
+
+    return lines.join('\n').trim()
+  }
+
+  const handleCopyMorningBriefing = async () => {
+    try {
+      await navigator.clipboard.writeText(generateMorningBriefingText())
+      setCopiedMorningBrief(true)
+      setTimeout(() => setCopiedMorningBrief(false), 2500)
+    } catch {
+      setError('Impossibile copiare il Morning Briefing negli appunti.')
+    }
   }
 
   const handleSosClick = (mission: Mission) => {
@@ -938,10 +1391,10 @@ export default function MissionBoard({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
-            Registro Missioni, Flotta &amp; Risk Assessment
+            Agenda Direzionale, Flotta &amp; Risk Assessment
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Pianificazione movimenti, assegnazione callsign, check-in GPS, SOS e safe havens
+            Pianificazione movimenti, dossier incontri, travel PNR, check-in GPS e safe havens
           </p>
         </div>
 
@@ -982,10 +1435,26 @@ export default function MissionBoard({
               <button
                 type="button"
                 onClick={() => {
-                  setShowFleet(!showFleet)
-                  if (!showFleet) setShowForm(false)
+                  setShowMorningBrief(!showMorningBrief)
+                  if (!showMorningBrief) {
+                    setShowFleet(false)
+                    setShowForm(false)
+                  }
                 }}
-                className="ml-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
+                className="ml-1 bg-amber-950/70 hover:bg-amber-900/70 text-amber-300 border border-amber-700 text-xs uppercase tracking-wider px-3 py-1.5 rounded transition font-semibold"
+              >
+                {showMorningBrief ? 'Chiudi Briefing' : 'Morning Briefing'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFleet(!showFleet)
+                  if (!showFleet) {
+                    setShowForm(false)
+                    setShowMorningBrief(false)
+                  }
+                }}
+                className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
               >
                 {showFleet ? 'Chiudi Flotta' : `Flotta (${vehicles.length})`}
               </button>
@@ -993,7 +1462,10 @@ export default function MissionBoard({
                 type="button"
                 onClick={() => {
                   setShowForm(!showForm)
-                  if (!showForm) setShowFleet(false)
+                  if (!showForm) {
+                    setShowFleet(false)
+                    setShowMorningBrief(false)
+                  }
                 }}
                 className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
               >
@@ -1007,6 +1479,31 @@ export default function MissionBoard({
       {error && (
         <div className="mt-4 p-3 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
           {error}
+        </div>
+      )}
+
+      {isAdmin && showMorningBrief && (
+        <div className="mt-5 p-4 bg-neutral-950 border border-amber-800/80 rounded-lg space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-amber-300 font-bold">
+                Morning Briefing Direzione - Riepilogo Esecutivo
+              </div>
+              <p className="text-[11px] text-neutral-400">
+                Include orari, tratte, interlocutori, obiettivi meeting, codici PNR e livello rischio
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyMorningBriefing}
+              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition"
+            >
+              {copiedMorningBrief ? 'Morning Briefing Copiato' : 'Copia Briefing per Direzione'}
+            </button>
+          </div>
+          <pre className="p-3 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-200 whitespace-pre-wrap font-mono overflow-x-auto">
+            {generateMorningBriefingText()}
+          </pre>
         </div>
       )}
 
@@ -1107,13 +1604,13 @@ export default function MissionBoard({
           className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4"
         >
           <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
-            Nuovo Ordine di Servizio
+            Nuovo Ordine di Servizio / Appuntamento
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Cliente / VIP *
+                Cliente / VIP / Oggetto Agenda *
               </label>
               <input
                 type="text"
@@ -1218,7 +1715,7 @@ export default function MissionBoard({
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Punto di Rilascio (Drop-off) *
+                Punto di Rilascio / Sede Incontro *
               </label>
               <input
                 type="text"
@@ -1233,13 +1730,13 @@ export default function MissionBoard({
 
           <div>
             <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-              Note Tattiche / Itinerario Alternativo
+              Note Logistica (Visibili anche all&apos;operatore sul campo)
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Eventuali criticita percorso, safe haven o referenti in loco"
+              placeholder="Accesso carraio, pass ZTL, tempi di attesa (per note riservate usa Dossier & Travel)"
               className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
             />
           </div>
@@ -1250,7 +1747,7 @@ export default function MissionBoard({
               disabled={loading}
               className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase tracking-wider px-5 py-2 rounded transition disabled:opacity-50"
             >
-              {loading ? 'Registrazione...' : 'Conferma e Registra Missione'}
+              {loading ? 'Registrazione...' : 'Conferma e Registra'}
             </button>
           </div>
         </form>
@@ -1261,7 +1758,11 @@ export default function MissionBoard({
           filteredMissions.map((mission) => {
             const isAssignedToMe = mission.assigned_operator_id === userId
             const risk = riskList.find((r) => r.mission_id === mission.id)
-            const isExpanded = expandedRiskId === mission.id
+            const brief = isAdmin
+              ? briefList.find((b) => b.mission_id === mission.id)
+              : undefined
+            const isRiskExpanded = expandedRiskId === mission.id
+            const isBriefExpanded = isAdmin && expandedBriefId === mission.id
             const isCheckingIn = checkingInId === mission.id
             const lastCheckIn = lastCheckIns[mission.id]
             const isConfirmingSos = sosConfirmId === mission.id
@@ -1299,6 +1800,11 @@ export default function MissionBoard({
                       >
                         {risk ? `Rischio: ${risk.threat_level}` : 'Rischio: N/D'}
                       </span>
+                      {isAdmin && brief && (
+                        <span className="px-2 py-0.5 rounded border text-[10px] uppercase font-bold bg-amber-950/70 text-amber-300 border-amber-700">
+                          Dossier OK
+                        </span>
+                      )}
                       <span className="text-sm font-bold text-neutral-100 uppercase tracking-wide">
                         {mission.client_vip}
                       </span>
@@ -1353,9 +1859,18 @@ export default function MissionBoard({
                       </a>
                     </div>
 
+                    {isAdmin && brief?.counterpart_name && (
+                      <div className="text-[11px] text-amber-300/90">
+                        <span className="text-neutral-500">Interlocutore:</span>{' '}
+                        {brief.counterpart_name}
+                        {brief.counterpart_role ? ` (${brief.counterpart_role})` : ''}
+                        {brief.travel_booking_ref ? ` | Travel: ${brief.travel_booking_ref}` : ''}
+                      </div>
+                    )}
+
                     {mission.notes && (
                       <div className="text-neutral-400 italic pt-0.5">
-                        Note: {mission.notes}
+                        Note Logistica: {mission.notes}
                       </div>
                     )}
 
@@ -1432,19 +1947,38 @@ export default function MissionBoard({
                       {isCheckingIn ? 'Rilevamento GPS...' : 'Check-in GPS'}
                     </button>
 
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedBriefId(isBriefExpanded ? null : mission.id)
+                          if (!isBriefExpanded) setExpandedRiskId(null)
+                        }}
+                        className={
+                          'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
+                          (isBriefExpanded
+                            ? 'bg-amber-300 text-neutral-950 border-amber-300'
+                            : 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border-amber-700/80')
+                        }
+                      >
+                        {isBriefExpanded ? 'Chiudi Dossier' : 'Dossier & Travel'}
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() =>
-                        setExpandedRiskId(isExpanded ? null : mission.id)
-                      }
+                      onClick={() => {
+                        setExpandedRiskId(isRiskExpanded ? null : mission.id)
+                        if (!isRiskExpanded) setExpandedBriefId(null)
+                      }}
                       className={
                         'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
-                        (isExpanded
+                        (isRiskExpanded
                           ? 'bg-neutral-200 text-neutral-950 border-neutral-200'
                           : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-800/80')
                       }
                     >
-                      {isExpanded ? 'Chiudi Scheda' : 'Risk & Safe Havens'}
+                      {isRiskExpanded ? 'Chiudi Risk' : 'Risk & Safe Havens'}
                     </button>
 
                     {isAdmin && (
@@ -1495,7 +2029,20 @@ export default function MissionBoard({
                   </div>
                 </div>
 
-                {isExpanded && (
+                {isBriefExpanded && (
+                  <ExecutiveBriefPanel
+                    mission={mission}
+                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
+                    risk={risk}
+                    brief={brief}
+                    userEmail={userEmail}
+                    userId={userId}
+                    onBriefSaved={handleBriefSaved}
+                    onAuditUpdated={onAuditUpdated}
+                  />
+                )}
+
+                {isRiskExpanded && (
                   <MissionRiskPanel
                     missionId={mission.id}
                     clientVip={mission.client_vip}
@@ -1511,6 +2058,7 @@ export default function MissionBoard({
                     userEmail={userEmail}
                     userId={userId}
                     onRiskSaved={handleRiskSaved}
+                    onAuditUpdated={onAuditUpdated}
                   />
                 )}
               </div>
