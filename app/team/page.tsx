@@ -24,6 +24,8 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamProfile[]>([])
   const [error, setError] = useState<string | null>(null)
   const [callsignDrafts, setCallsignDrafts] = useState<{ [id: string]: string }>({})
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadMembers = useCallback(async () => {
     const { data, error: listErr } = await supabase
@@ -74,6 +76,14 @@ export default function TeamPage() {
 
     initTeam()
   }, [supabase, router, loadMembers])
+
+  useEffect(() => {
+    if (!deleteConfirmId) return
+    const timer = setTimeout(() => {
+      setDeleteConfirmId(null)
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [deleteConfirmId])
 
   const handleToggleActive = async (member: TeamProfile) => {
     if (member.id === adminId) {
@@ -159,6 +169,44 @@ export default function TeamPage() {
     await loadMembers()
   }
 
+  const handleDeleteUser = async (member: TeamProfile) => {
+    if (member.id === adminId) {
+      setError('Non puoi eliminare il tuo stesso account amministratore.')
+      return
+    }
+
+    if (deleteConfirmId !== member.id) {
+      setDeleteConfirmId(member.id)
+      return
+    }
+
+    setDeleteConfirmId(null)
+    setDeletingId(member.id)
+    setError(null)
+
+    try {
+      const { error: rpcErr } = await supabase.rpc('delete_portal_user', {
+        target_user_id: member.id,
+      })
+
+      if (rpcErr) throw rpcErr
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: adminEmail,
+          action: `TEAM_USER_DELETED: ${member.email}`,
+          status: 'SUCCESS',
+        },
+      ])
+
+      await loadMembers()
+    } catch (err: any) {
+      setError(err.message || 'Impossibile eliminare definitivamente il profilo.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
@@ -177,7 +225,7 @@ export default function TeamPage() {
                 Gestione Team, Clearance &amp; Ruoli
               </h1>
               <p className="text-xs text-neutral-400 mt-1">
-                Approvazione registrazioni, assegnazione Callsign e profilazione accessi
+                Approvazione registrazioni, assegnazione Callsign, ruoli e rimozione profili
               </p>
             </div>
             <button
@@ -199,6 +247,8 @@ export default function TeamPage() {
             {members.map((member) => {
               const isMe = member.id === adminId
               const roleLower = String(member.role || 'operator').toLowerCase()
+              const isConfirmingDelete = deleteConfirmId === member.id
+              const isDeleting = deletingId === member.id
 
               return (
                 <div
@@ -280,18 +330,40 @@ export default function TeamPage() {
                     </select>
 
                     {!isMe && (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleActive(member)}
-                        className={
-                          'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
-                          (member.is_active
-                            ? 'bg-neutral-900 hover:bg-red-950/70 text-red-300 border-red-800/80'
-                            : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 border-emerald-400')
-                        }
-                      >
-                        {member.is_active ? 'Sospendi' : 'Approva Accesso'}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(member)}
+                          className={
+                            'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
+                            (member.is_active
+                              ? 'bg-neutral-900 hover:bg-amber-950/70 text-amber-300 border-amber-800/80'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 border-emerald-400')
+                          }
+                        >
+                          {member.is_active ? 'Sospendi' : 'Approva Accesso'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteUser(member)}
+                          title="Doppio clic rapido per eliminare definitivamente il profilo"
+                          className={
+                            'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
+                            (isConfirmingDelete
+                              ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
+                              : 'bg-neutral-900 hover:bg-red-950/70 text-red-400 border-red-900/80') +
+                            ' disabled:opacity-50'
+                          }
+                        >
+                          {isDeleting
+                            ? 'Eliminazione...'
+                            : isConfirmingDelete
+                            ? 'Conferma Elimina?'
+                            : 'Elimina'}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
