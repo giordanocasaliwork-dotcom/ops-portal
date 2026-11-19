@@ -1,57 +1,59 @@
  'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 
-type Profile = {
+interface TeamProfile {
   id: string
   email: string
   full_name: string | null
   callsign: string | null
-  role: 'admin' | 'operator'
+  role: string
   is_active: boolean
-  created_at: string
+  created_at?: string
 }
 
-export default function TeamManagementPage() {
+export default function TeamPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
-  const [profiles, setProfiles] = useState<Profile[]>([])
-  const [callsignDrafts, setCallsignDrafts] = useState<Record<string, string>>({})
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('')
   const [loading, setLoading] = useState(true)
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [adminEmail, setAdminEmail] = useState('')
+  const [adminId, setAdminId] = useState('')
+  const [members, setMembers] = useState<TeamProfile[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [callsignDrafts, setCallsignDrafts] = useState<{ [id: string]: string }>({})
 
-  const fetchProfiles = useCallback(async () => {
-    const { data, error } = await supabase
+  const loadMembers = useCallback(async () => {
+    const { data, error: listErr } = await supabase
       .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
+      .select('id, email, full_name, callsign, role, is_active, created_at')
+      .order('is_active', { ascending: true })
+      .order('email', { ascending: true })
 
-    if (!error && data) {
-      const list = data as Profile[]
-      setProfiles(list)
-      const drafts: Record<string, string> = {}
-      list.forEach((p) => {
-        drafts[p.id] = p.callsign || ''
+    if (listErr) {
+      setError('Errore caricamento elenco personale.')
+      return
+    }
+
+    if (data) {
+      setMembers(data)
+      const drafts: { [id: string]: string } = {}
+      data.forEach((m) => {
+        drafts[m.id] = m.callsign || ''
       })
       setCallsignDrafts(drafts)
     }
   }, [supabase])
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+    const initTeam = async () => {
+      const { data: { user }, error: authErr } = await supabase.auth.getUser()
+      if (authErr || !user) {
         router.replace('/login')
         return
       }
-
-      setCurrentUserId(user.id)
-      setCurrentUserEmail(user.email ?? 'unknown')
 
       const { data: myProfile } = await supabase
         .from('profiles')
@@ -59,58 +61,108 @@ export default function TeamManagementPage() {
         .eq('id', user.id)
         .single()
 
-      const isAdmin = String(myProfile?.role || '').trim().toLowerCase() === 'admin'
-
-      if (!myProfile || !isAdmin || !myProfile.is_active) {
+      if (!myProfile || !myProfile.is_active || String(myProfile.role).toLowerCase() !== 'admin') {
         router.replace('/dashboard')
         return
       }
 
-      await fetchProfiles()
+      setAdminEmail(user.email || '')
+      setAdminId(user.id)
+      await loadMembers()
       setLoading(false)
     }
 
-    init()
-  }, [supabase, router, fetchProfiles])
+    initTeam()
+  }, [supabase, router, loadMembers])
 
-  const handleUpdateUser = async (
-    target: Profile,
-    updates: Partial<Pick<Profile, 'role' | 'is_active' | 'callsign'>>
-  ) => {
-    if (target.id === currentUserId && ('role' in updates || 'is_active' in updates)) {
+  const handleToggleActive = async (member: TeamProfile) => {
+    if (member.id === adminId) {
+      setError('Non puoi disattivare il tuo stesso account amministratore.')
       return
     }
-    setUpdatingId(target.id)
 
-    const { error } = await supabase
+    setError(null)
+    const nextState = !member.is_active
+
+    const { error: updErr } = await supabase
       .from('profiles')
-      .update(updates)
-      .eq('id', target.id)
+      .update({ is_active: nextState })
+      .eq('id', member.id)
 
-    if (!error) {
-      await supabase.from('audit_logs').insert({
-        user_email: currentUserEmail,
-        action: `TEAM_UPDATE: ${target.email} -> ${JSON.stringify(updates)}`,
-        status: 'SUCCESS',
-      })
-      await fetchProfiles()
-    } else {
-      alert(`Errore aggiornamento: ${error.message}`)
+    if (updErr) {
+      setError('Impossibile aggiornare lo stato di abilitazione.')
+      return
     }
 
-    setUpdatingId(null)
+    await supabase.from('audit_logs').insert([
+      {
+        user_email: adminEmail,
+        action: `TEAM_ACCESS_${nextState ? 'APPROVED' : 'SUSPENDED'}: ${member.email}`,
+        status: 'SUCCESS',
+      },
+    ])
+
+    await loadMembers()
   }
 
-  const handleSaveCallsign = async (member: Profile) => {
-    const formatted = (callsignDrafts[member.id] || '').trim().toUpperCase() || null
-    if (formatted === (member.callsign || null)) return
-    await handleUpdateUser(member, { callsign: formatted })
+  const handleRoleChange = async (member: TeamProfile, newRole: string) => {
+    if (member.id === adminId) {
+      setError('Non puoi modificare il ruolo del tuo stesso account.')
+      return
+    }
+
+    setError(null)
+
+    const { error: updErr } = await supabase
+      .from('profiles')
+      .update({ role: newRole })
+      .eq('id', member.id)
+
+    if (updErr) {
+      setError('Impossibile aggiornare il ruolo utente.')
+      return
+    }
+
+    await supabase.from('audit_logs').insert([
+      {
+        user_email: adminEmail,
+        action: `TEAM_ROLE_UPDATE: ${member.email} -> ${newRole.toUpperCase()}`,
+        status: 'SUCCESS',
+      },
+    ])
+
+    await loadMembers()
+  }
+
+  const handleSaveCallsign = async (member: TeamProfile) => {
+    setError(null)
+    const cleanCallsign = (callsignDrafts[member.id] || '').trim().toUpperCase() || null
+
+    const { error: updErr } = await supabase
+      .from('profiles')
+      .update({ callsign: cleanCallsign })
+      .eq('id', member.id)
+
+    if (updErr) {
+      setError('Errore salvataggio callsign.')
+      return
+    }
+
+    await supabase.from('audit_logs').insert([
+      {
+        user_email: adminEmail,
+        action: `TEAM_CALLSIGN_UPDATE: ${member.email} -> ${cleanCallsign || 'NESSUNO'}`,
+        status: 'SUCCESS',
+      },
+    ])
+
+    await loadMembers()
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
-        Verifica clearance amministrativa in corso...
+        Verifica clearance amministratore...
       </div>
     )
   }
@@ -118,145 +170,134 @@ export default function TeamManagementPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
-              Ops Portal • Gestione Team & Callsign
-            </h1>
-            <p className="text-xs text-neutral-400 mt-1">
-              Assegnazione identificativi radio, ruoli RBAC e controllo accessi
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs px-3 py-1.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800">
-              Account censiti: {profiles.length}
-            </span>
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
+            <div>
+              <h1 className="text-lg font-bold uppercase tracking-widest text-neutral-100">
+                Gestione Team, Clearance &amp; Ruoli
+              </h1>
+              <p className="text-xs text-neutral-400 mt-1">
+                Approvazione registrazioni, assegnazione Callsign e profilazione accessi
+              </p>
+            </div>
             <button
+              type="button"
               onClick={() => router.push('/dashboard')}
-              className="text-xs uppercase tracking-wider px-4 py-2 rounded bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 transition"
+              className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
             >
-              ← Dashboard
+              &larr; Torna alla Dashboard
             </button>
           </div>
-        </div>
 
-        <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900 shadow-xl">
-          <table className="w-full text-left text-xs text-neutral-300">
-            <thead className="bg-neutral-950 uppercase text-neutral-500 border-b border-neutral-800">
-              <tr>
-                <th className="px-4 py-3">Operatore</th>
-                <th className="px-4 py-3">Callsign Operativo</th>
-                <th className="px-4 py-3">Ruolo</th>
-                <th className="px-4 py-3">Stato</th>
-                <th className="px-4 py-3 text-right">Azioni</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800/60">
-              {profiles.map((member) => {
-                const isSelf = member.id === currentUserId
-                const isBusy = updatingId === member.id
-                const currentDraft = callsignDrafts[member.id] ?? ''
-                const isDirty =
-                  (currentDraft.trim().toUpperCase() || null) !== (member.callsign || null)
+          {error && (
+            <div className="mt-4 p-3 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded">
+              {error}
+            </div>
+          )}
 
-                return (
-                  <tr key={member.id} className="hover:bg-neutral-800/40">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-neutral-100">
-                        {member.full_name || 'Operatore senza nome'}
-                        {isSelf && (
-                          <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300">
-                            TU
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-neutral-400 mt-0.5">{member.email}</div>
-                    </td>
+          <div className="mt-5 space-y-3">
+            {members.map((member) => {
+              const isMe = member.id === adminId
+              const roleLower = String(member.role || 'operator').toLowerCase()
 
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          disabled={isBusy}
-                          value={currentDraft}
-                          onChange={(e) =>
-                            setCallsignDrafts((prev) => ({
-                              ...prev,
-                              [member.id]: e.target.value.toUpperCase(),
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              handleSaveCallsign(member)
-                            }
-                          }}
-                          placeholder="ES. ALPHA-1"
-                          className="w-28 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-emerald-300 font-bold uppercase placeholder:text-neutral-600 focus:outline-none focus:border-emerald-600"
-                        />
-                        {isDirty && (
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => handleSaveCallsign(member)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold px-2 py-1 rounded text-[10px] uppercase transition"
-                          >
-                            Salva
-                          </button>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <select
-                        disabled={isSelf || isBusy}
-                        value={member.role}
-                        onChange={(e) =>
-                          handleUpdateUser(member, {
-                            role: e.target.value as 'admin' | 'operator',
-                          })
+              return (
+                <div
+                  key={member.id}
+                  className={
+                    'bg-neutral-950 border rounded-lg p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-xs ' +
+                    (!member.is_active ? 'border-amber-700/80' : 'border-neutral-800')
+                  }
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] font-bold uppercase ' +
+                          (member.is_active
+                            ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700'
+                            : 'bg-amber-950/80 text-amber-300 border-amber-700')
                         }
-                        className="bg-neutral-950 border border-neutral-700 rounded px-2.5 py-1 text-xs text-neutral-100 disabled:opacity-50"
                       >
-                        <option value="operator">OPERATOR</option>
-                        <option value="admin">ADMIN</option>
-                      </select>
-                    </td>
+                        {member.is_active ? 'ATTIVO' : 'IN ATTESA APPROVAZIONE'}
+                      </span>
 
-                    <td className="px-4 py-3">
-                      {member.is_active ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-800">
-                          ATTIVO
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold bg-amber-950/70 text-amber-400 border border-amber-800">
-                          IN ATTESA
-                        </span>
-                      )}
-                    </td>
+                      <span
+                        className={
+                          'px-2 py-0.5 rounded border text-[10px] font-bold uppercase ' +
+                          (roleLower === 'admin'
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                            : roleLower === 'executive'
+                            ? 'bg-amber-950 text-amber-300 border-amber-700'
+                            : 'bg-neutral-900 text-neutral-300 border-neutral-700')
+                        }
+                      >
+                        {roleLower === 'executive' ? 'EXECUTIVE • DIREZIONE' : roleLower}
+                      </span>
 
-                    <td className="px-4 py-3 text-right">
-                      {!isSelf && (
-                        <button
-                          disabled={isBusy}
-                          onClick={() =>
-                            handleUpdateUser(member, { is_active: !member.is_active })
-                          }
-                          className={`px-3 py-1.5 rounded text-xs uppercase tracking-wider font-semibold transition ${
-                            member.is_active
-                              ? 'bg-red-950/70 text-red-400 border border-red-800 hover:bg-red-900/50'
-                              : 'bg-emerald-600 text-neutral-950 hover:bg-emerald-500'
-                          } disabled:opacity-50`}
-                        >
-                          {member.is_active ? 'Revoca' : 'Attiva'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      <span className="text-sm font-bold text-neutral-100">
+                        {member.full_name || member.email}
+                      </span>
+                    </div>
+
+                    <div className="text-neutral-400">
+                      Email: <span className="text-neutral-200">{member.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={callsignDrafts[member.id] ?? ''}
+                        onChange={(e) =>
+                          setCallsignDrafts((prev) => ({
+                            ...prev,
+                            [member.id]: e.target.value.toUpperCase(),
+                          }))
+                        }
+                        placeholder="Callsign"
+                        className="w-24 bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-xs text-neutral-200 uppercase"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveCallsign(member)}
+                        className="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 text-[11px] uppercase px-2 py-1.5 rounded"
+                      >
+                        Salva
+                      </button>
+                    </div>
+
+                    <select
+                      aria-label="Ruolo utente"
+                      disabled={isMe}
+                      value={roleLower}
+                      onChange={(e) => handleRoleChange(member, e.target.value)}
+                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 disabled:opacity-50"
+                    >
+                      <option value="operator">Operator (Campo)</option>
+                      <option value="executive">Executive (Direzione)</option>
+                      <option value="admin">Admin (Regia Completa)</option>
+                    </select>
+
+                    {!isMe && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(member)}
+                        className={
+                          'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
+                          (member.is_active
+                            ? 'bg-neutral-900 hover:bg-red-950/70 text-red-300 border-red-800/80'
+                            : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 border-emerald-400')
+                        }
+                      >
+                        {member.is_active ? 'Sospendi' : 'Approva Accesso'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
