@@ -823,6 +823,8 @@ export default function MissionBoard({
   const [showFleet, setShowFleet] = useState(false)
   const [showMorningBrief, setShowMorningBrief] = useState(false)
   const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
+  const [sendingTelegramBrief, setSendingTelegramBrief] = useState(false)
+  const [telegramBriefStatus, setTelegramBriefStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1000,6 +1002,33 @@ export default function MissionBoard({
       setTimeout(() => setCopiedMorningBrief(false), 2500)
     } catch {
       setError('Impossibile copiare il Morning Briefing negli appunti.')
+    }
+  }
+
+  const handleSendMorningBriefingTelegram = async () => {
+    setSendingTelegramBrief(true)
+    setTelegramBriefStatus(null)
+    setError(null)
+
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('send_telegram_morning_briefing')
+      if (rpcErr) throw rpcErr
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: 'MORNING_BRIEFING_TELEGRAM (INVIO MANUALE)',
+          status: 'SUCCESS',
+        },
+      ])
+
+      setTelegramBriefStatus(String(data || 'Briefing inviato su Telegram'))
+      if (onAuditUpdated) onAuditUpdated()
+      setTimeout(() => setTelegramBriefStatus(null), 4000)
+    } catch (err: any) {
+      setError(err.message || 'Errore invio Morning Briefing su Telegram.')
+    } finally {
+      setSendingTelegramBrief(false)
     }
   }
 
@@ -1490,17 +1519,34 @@ export default function MissionBoard({
                 Morning Briefing Direzione - Riepilogo Esecutivo
               </div>
               <p className="text-[11px] text-neutral-400">
-                Include orari, tratte, interlocutori, obiettivi meeting, codici PNR e livello rischio
+                Invio automatico programmato ogni giorno alle 07:30 su Telegram (oppure invio manuale istantaneo)
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleCopyMorningBriefing}
-              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition"
-            >
-              {copiedMorningBrief ? 'Morning Briefing Copiato' : 'Copia Briefing per Direzione'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={sendingTelegramBrief}
+                onClick={handleSendMorningBriefingTelegram}
+                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+              >
+                {sendingTelegramBrief ? 'Invio Telegram...' : 'Invia Ora su Telegram'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyMorningBriefing}
+                className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition"
+              >
+                {copiedMorningBrief ? 'Morning Briefing Copiato' : 'Copia Briefing'}
+              </button>
+            </div>
           </div>
+
+          {telegramBriefStatus && (
+            <div className="p-2.5 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded">
+              {telegramBriefStatus}
+            </div>
+          )}
+
           <pre className="p-3 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-200 whitespace-pre-wrap font-mono overflow-x-auto">
             {generateMorningBriefingText()}
           </pre>
