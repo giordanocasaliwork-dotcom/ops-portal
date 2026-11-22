@@ -7,6 +7,7 @@ import MissionBoard, { Mission } from '../../components/MissionBoard'
 import ExecutiveAppointments from '../../components/ExecutiveAppointments'
 import ExecutiveHub from '../../components/ExecutiveHub'
 import OperationsControl from '../../components/OperationsControl'
+import SopChecklists from '../../components/SopChecklists'
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -20,6 +21,12 @@ export default function DashboardPage() {
   const [logs, setLogs] = useState<any[]>([])
   const [dismissedSosId, setDismissedSosId] = useState<string | null>(null)
   const [archivingSos, setArchivingSos] = useState(false)
+
+  // KPI situazionali in tempo reale
+  const [todayEventsCount, setTodayEventsCount] = useState<number>(0)
+  const [urgentTasksCount, setUrgentTasksCount] = useState<number>(0)
+  const [pendingExpensesSum, setPendingExpensesSum] = useState<number>(0)
+  const [pendingUsersCount, setPendingUsersCount] = useState<number>(0)
 
   const [globalSosConfirm, setGlobalSosConfirm] = useState(false)
   const [sendingGlobalSos, setSendingGlobalSos] = useState(false)
@@ -47,6 +54,54 @@ export default function DashboardPage() {
     const coords = endIdx === -1 ? afterAt.trim() : afterAt.slice(0, endIdx).trim()
     return coords.includes(',') ? coords : null
   }
+
+  const refreshKpiSummary = useCallback(
+    async (adminFlag: boolean, execFlag: boolean, currentMissions: Mission[]) => {
+      if (!adminFlag && !execFlag) return
+
+      const todayKey = new Date().toDateString()
+      const todayMissionsCount = execFlag
+        ? 0
+        : currentMissions.filter(
+            (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+          ).length
+
+      const [apptsRes, tasksRes, expRes] = await Promise.all([
+        supabase.from('executive_appointments').select('start_time, status'),
+        supabase.from('action_items').select('priority, status, due_date'),
+        supabase.from('expense_logs').select('amount, reimbursement_status'),
+      ])
+
+      const todayApptsCount = (apptsRes.data || []).filter(
+        (a: any) =>
+          new Date(a.start_time).toDateString() === todayKey && a.status !== 'COMPLETATO'
+      ).length
+
+      setTodayEventsCount(todayMissionsCount + todayApptsCount)
+
+      const urgentCount = (tasksRes.data || []).filter((t: any) => {
+        if (t.status === 'COMPLETATO') return false
+        if (t.priority === 'ALTA') return true
+        if (t.due_date && new Date(t.due_date).getTime() < Date.now()) return true
+        return false
+      }).length
+      setUrgentTasksCount(urgentCount)
+
+      const pendingSum = (expRes.data || [])
+        .filter((e: any) => e.reimbursement_status === 'DA RENDICONTARE')
+        .reduce((acc: number, e: any) => acc + Number(e.amount || 0), 0)
+      setPendingExpensesSum(pendingSum)
+
+      if (adminFlag) {
+        const { data: inactiveProfiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('is_active', false)
+        setPendingUsersCount((inactiveProfiles || []).length)
+      }
+    },
+    [supabase]
+  )
 
   const refreshAuditLogs = useCallback(async () => {
     const { data: logsData } = await supabase
@@ -90,14 +145,18 @@ export default function DashboardPage() {
       const adminFlag = normalizedRole === 'admin'
       const execFlag = normalizedRole === 'executive'
 
+      let loadedMissions: Mission[] = []
       if (!execFlag) {
         const { data: missionsData } = await supabase
           .from('missions')
           .select('*')
           .order('start_time', { ascending: true })
 
-        setMissions((missionsData as Mission[]) || [])
+        loadedMissions = (missionsData as Mission[]) || []
+        setMissions(loadedMissions)
       }
+
+      await refreshKpiSummary(adminFlag, execFlag, loadedMissions)
 
       if (adminFlag) {
         await refreshAuditLogs()
@@ -107,15 +166,17 @@ export default function DashboardPage() {
     }
 
     loadDashboard()
-  }, [supabase, router, refreshAuditLogs])
+  }, [supabase, router, refreshAuditLogs, refreshKpiSummary])
 
   useEffect(() => {
-    if (role.toLowerCase() !== 'admin') return
+    const norm = role.toLowerCase()
+    if (norm !== 'admin' && norm !== 'executive') return
     const interval = setInterval(() => {
-      refreshAuditLogs()
+      if (norm === 'admin') refreshAuditLogs()
+      refreshKpiSummary(norm === 'admin', norm === 'executive', missions)
     }, 15000)
     return () => clearInterval(interval)
-  }, [role, refreshAuditLogs])
+  }, [role, missions, refreshAuditLogs, refreshKpiSummary])
 
   useEffect(() => {
     if (!globalSosConfirm) return
@@ -124,6 +185,14 @@ export default function DashboardPage() {
     }, 5000)
     return () => clearTimeout(timer)
   }, [globalSosConfirm])
+
+  const handleControlRoomSync = useCallback(() => {
+    const norm = role.toLowerCase()
+    const adminFlag = norm === 'admin'
+    const execFlag = norm === 'executive'
+    if (adminFlag) refreshAuditLogs()
+    refreshKpiSummary(adminFlag, execFlag, missions)
+  }, [role, missions, refreshAuditLogs, refreshKpiSummary])
 
   const handleArchiveSosBanner = async (sosLog: any) => {
     const sosKey = String(sosLog.id || sosLog.created_at)
@@ -344,9 +413,14 @@ export default function DashboardPage() {
               {isAdmin && (
                 <button
                   onClick={() => router.push('/team')}
-                  className="bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition font-semibold"
+                  className="bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition font-semibold flex items-center gap-2"
                 >
-                  Gestione Team
+                  <span>Gestione Team</span>
+                  {pendingUsersCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-400 text-neutral-950 text-[10px] font-bold animate-pulse">
+                      +{pendingUsersCount}
+                    </span>
+                  )}
                 </button>
               )}
               <button
@@ -417,10 +491,63 @@ export default function DashboardPage() {
         </div>
 
         {canAccessExecutivePanels && (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 text-xs`}>
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase text-neutral-500 font-bold">Agenda Oggi</div>
+                <div className="text-neutral-300 mt-0.5">Eventi &amp; Movimenti</div>
+              </div>
+              <div className="text-xl font-bold text-amber-300">{todayEventsCount}</div>
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase text-neutral-500 font-bold">Priorita &amp; Scadenze</div>
+                <div className="text-neutral-300 mt-0.5">Deleghe Alta / Scadute</div>
+              </div>
+              <div className={`text-xl font-bold ${urgentTasksCount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {urgentTasksCount}
+              </div>
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase text-neutral-500 font-bold">Nota Spese</div>
+                <div className="text-neutral-300 mt-0.5">Da Rendicontare</div>
+              </div>
+              <div className="text-lg font-bold text-sky-300">
+                &euro; {pendingExpensesSum.toFixed(2)}
+              </div>
+            </div>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => router.push('/team')}
+                className={
+                  'bg-neutral-900 border rounded-lg p-4 flex items-center justify-between text-left transition ' +
+                  (pendingUsersCount > 0
+                    ? 'border-amber-600/80 hover:bg-amber-950/20'
+                    : 'border-neutral-800 hover:border-neutral-700')
+                }
+              >
+                <div>
+                  <div className="text-[10px] uppercase text-neutral-500 font-bold">Clearance Team</div>
+                  <div className="text-neutral-300 mt-0.5">Richieste in Sospeso</div>
+                </div>
+                <div className={`text-xl font-bold ${pendingUsersCount > 0 ? 'text-amber-300 animate-pulse' : 'text-neutral-400'}`}>
+                  {pendingUsersCount}
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+
+        {canAccessExecutivePanels && (
           <ExecutiveAppointments
             userEmail={user.email || ''}
             userId={user.id}
-            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
@@ -430,21 +557,28 @@ export default function DashboardPage() {
             isAdmin={isAdmin}
             userEmail={user.email || ''}
             userId={user.id}
-            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+            onAuditUpdated={isAdmin ? handleControlRoomSync : undefined}
           />
         )}
 
         {canAccessExecutivePanels && (
           <ExecutiveHub
             userEmail={user.email || ''}
-            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
         {canAccessExecutivePanels && (
           <OperationsControl
             userEmail={user.email || ''}
-            onAuditUpdated={isAdmin ? refreshAuditLogs : undefined}
+            onAuditUpdated={handleControlRoomSync}
+          />
+        )}
+
+        {canAccessExecutivePanels && (
+          <SopChecklists
+            userEmail={user.email || ''}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
