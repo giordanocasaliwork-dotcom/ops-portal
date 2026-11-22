@@ -861,6 +861,49 @@ export default function MissionBoard({
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
   }
 
+  const formatIcsDate = (isoString: string) => {
+    return new Date(isoString).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  }
+
+  const escapeIcsText = (raw: string) => {
+    return raw.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+  }
+
+  const handleDownloadMissionIcs = (mission: Mission) => {
+    const descParts = [
+      `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Assetto: ${mission.assigned_vehicle}`,
+      `Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
+      mission.notes ? `Note: ${mission.notes}` : null,
+    ].filter(Boolean)
+
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Ops Portal//Mission Control//IT',
+      'BEGIN:VEVENT',
+      `UID:mission-${mission.id}@ops-portal`,
+      `DTSTAMP:${formatIcsDate(new Date().toISOString())}`,
+      `DTSTART:${formatIcsDate(mission.start_time)}`,
+      `DTEND:${formatIcsDate(mission.end_time)}`,
+      `SUMMARY:${escapeIcsText(`Movimento: ${mission.client_vip}`)}`,
+      `LOCATION:${escapeIcsText(`${mission.pickup_point} -> ${mission.dropoff_point}`)}`,
+      `DESCRIPTION:${escapeIcsText(descParts.join('\n'))}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ]
+
+    const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `missione-${mission.client_vip.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.ics`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const loadAssets = useCallback(async () => {
     const opsRes = await supabase
       .from('profiles')
@@ -1003,6 +1046,40 @@ export default function MissionBoard({
     } catch {
       setError('Impossibile copiare il Morning Briefing negli appunti.')
     }
+  }
+
+  const handlePrintMorningBriefing = () => {
+    const printWin = window.open('', '_blank', 'width=850,height=950')
+    if (!printWin) {
+      setError('Abilita i pop-up del browser per generare il PDF/stampa.')
+      return
+    }
+
+    const escaped = generateMorningBriefingText()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+        <meta charset="utf-8" />
+        <title>Morning Briefing Direzione</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 40px; }
+          .top { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 20px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; color: #444; }
+          pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+        </style>
+      </head>
+      <body>
+        <div class="top">RISERVATO DIREZIONE • MORNING BRIEFING ESECUTIVO</div>
+        <pre>${escaped}</pre>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    printWin.document.close()
   }
 
   const handleSendMorningBriefingTelegram = async () => {
@@ -1519,7 +1596,7 @@ export default function MissionBoard({
                 Morning Briefing Direzione - Riepilogo Esecutivo
               </div>
               <p className="text-[11px] text-neutral-400">
-                Invio automatico programmato ogni giorno alle 07:30 su Telegram (oppure invio manuale istantaneo)
+                Invio automatico ogni giorno alle 07:30 su Telegram (include appuntamenti, movimentazioni e deleghe)
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1527,16 +1604,23 @@ export default function MissionBoard({
                 type="button"
                 disabled={sendingTelegramBrief}
                 onClick={handleSendMorningBriefingTelegram}
-                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
               >
                 {sendingTelegramBrief ? 'Invio Telegram...' : 'Invia Ora su Telegram'}
               </button>
               <button
                 type="button"
-                onClick={handleCopyMorningBriefing}
-                className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition"
+                onClick={handlePrintMorningBriefing}
+                className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
               >
-                {copiedMorningBrief ? 'Morning Briefing Copiato' : 'Copia Briefing'}
+                PDF / Stampa
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyMorningBriefing}
+                className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
+              >
+                {copiedMorningBrief ? 'Copiato' : 'Copia Testo'}
               </button>
             </div>
           </div>
@@ -1650,7 +1734,7 @@ export default function MissionBoard({
           className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4"
         >
           <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
-            Nuovo Ordine di Servizio / Appuntamento
+            Nuovo Ordine di Servizio / Trasferta
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1991,6 +2075,15 @@ export default function MissionBoard({
                       className="px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition bg-sky-950/60 hover:bg-sky-900/70 text-sky-300 border-sky-700 disabled:opacity-50"
                     >
                       {isCheckingIn ? 'Rilevamento GPS...' : 'Check-in GPS'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadMissionIcs(mission)}
+                      title="Scarica evento calendario (.ics)"
+                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-sky-300 border-sky-800/80"
+                    >
+                      .ICS
                     </button>
 
                     {isAdmin && (
