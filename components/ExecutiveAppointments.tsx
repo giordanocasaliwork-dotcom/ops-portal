@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
@@ -91,6 +91,112 @@ export default function ExecutiveAppointments({
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
       d.getHours()
     )}:${pad(d.getMinutes())}`
+  }
+
+  const formatIcsDate = (isoString: string) => {
+    return new Date(isoString).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  }
+
+  const escapeIcsText = (raw: string) => {
+    return raw.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+  }
+
+  const handleDownloadIcs = (appt: ExecutiveAppointment) => {
+    const locationStr = `${appt.location_type}${
+      appt.location_details ? ' - ' + appt.location_details : ''
+    }`
+    const descParts = [
+      appt.participants ? `Partecipanti: ${appt.participants}` : null,
+      appt.meeting_agenda ? `Ordine del Giorno: ${appt.meeting_agenda}` : null,
+      appt.prep_notes ? `Note Preparatorie: ${appt.prep_notes}` : null,
+    ].filter(Boolean)
+
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Ops Portal//Executive Control Room//IT',
+      'BEGIN:VEVENT',
+      `UID:appt-${appt.id}@ops-portal`,
+      `DTSTAMP:${formatIcsDate(new Date().toISOString())}`,
+      `DTSTART:${formatIcsDate(appt.start_time)}`,
+      `DTEND:${formatIcsDate(appt.end_time)}`,
+      `SUMMARY:${escapeIcsText(appt.title)}`,
+      `LOCATION:${escapeIcsText(locationStr)}`,
+      `DESCRIPTION:${escapeIcsText(descParts.join('\n\n'))}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ]
+
+    const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `incontro-${appt.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.ics`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handlePrintAppointment = (appt: ExecutiveAppointment) => {
+    const printWin = window.open('', '_blank', 'width=850,height=950')
+    if (!printWin) {
+      setError('Abilita i pop-up del browser per generare la scheda PDF/stampa.')
+      return
+    }
+
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br/>')
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+        <meta charset="utf-8" />
+        <title>Scheda Incontro - ${escapeHtml(appt.title)}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 40px; line-height: 1.5; }
+          .header { border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+          .tag { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #555; }
+          h1 { font-size: 22px; margin: 4px 0 0 0; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f7f7f7; border: 1px solid #ddd; padding: 16px; border-radius: 6px; margin-bottom: 24px; font-size: 13px; }
+          .section { margin-bottom: 20px; }
+          .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #444; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
+          .box { font-size: 14px; padding: 10px 12px; border-left: 3px solid #111; background: #fafafa; }
+          .footer { margin-top: 40px; font-size: 11px; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="tag">RISERVATO DIREZIONE • SCHEDA BRIEFING INCONTRO</div>
+            <h1>${escapeHtml(appt.title)}</h1>
+          </div>
+          <div class="tag">STATO: ${escapeHtml(appt.status)}</div>
+        </div>
+        <div class="meta-grid">
+          <div><strong>Data e Orario:</strong><br/>${escapeHtml(formatDateTime(appt.start_time))} &rarr; ${escapeHtml(formatTimeOnly(appt.end_time))}</div>
+          <div><strong>Sede / Location:</strong><br/>${escapeHtml(appt.location_type)}${appt.location_details ? ' — ' + escapeHtml(appt.location_details) : ''}</div>
+          <div style="grid-column: span 2;"><strong>Partecipanti / Interlocutori:</strong><br/>${appt.participants ? escapeHtml(appt.participants) : 'Non specificati'}</div>
+        </div>
+        <div class="section">
+          <div class="section-title">Ordine del Giorno &amp; Dettagli Specifici</div>
+          <div class="box">${appt.meeting_agenda ? escapeHtml(appt.meeting_agenda) : 'Nessun dettaglio specifico inserito.'}</div>
+        </div>
+        <div class="section">
+          <div class="section-title">Materiali Preparatori &amp; Note Riservate</div>
+          <div class="box">${appt.prep_notes ? escapeHtml(appt.prep_notes) : 'Nessuna nota preparatoria.'}</div>
+        </div>
+        <div class="footer">Documento generato da Ops Portal • Executive Control Room il ${new Date().toLocaleString('it-IT')}</div>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    printWin.document.close()
   }
 
   const handleEditClick = (appt: ExecutiveAppointment) => {
@@ -567,6 +673,24 @@ export default function ExecutiveAppointments({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadIcs(appt)}
+                      title="Scarica evento per Google Calendar / Apple Calendar"
+                      className="bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-sky-800/80 text-xs px-2.5 py-1.5 rounded transition"
+                    >
+                      .ICS
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePrintAppointment(appt)}
+                      title="Apri versione stampabile / Salva PDF"
+                      className="bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs px-2.5 py-1.5 rounded transition"
+                    >
+                      PDF / Stampa
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setExpandedId(isExpanded ? null : appt.id)}
