@@ -8,6 +8,7 @@ import ExecutiveAppointments from '../../components/ExecutiveAppointments'
 import ExecutiveHub from '../../components/ExecutiveHub'
 import OperationsControl from '../../components/OperationsControl'
 import SopChecklists from '../../components/SopChecklists'
+import BackupManager from '../../components/BackupManager'
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -579,6 +580,13 @@ export default function DashboardPage() {
           <SopChecklists
             userEmail={user.email || ''}
             onAuditUpdated={handleControlRoomSync}
+          />
+        )}
+
+        {isAdmin && (
+          <BackupManager
+            userEmail={user.email || ''}
+            onAuditUpdated={refreshAuditLogs}
           />
         )}
 
