@@ -514,6 +514,19 @@ function ExecutiveBriefPanel({
   const [hospitalityDetails, setHospitalityDetails] = useState(brief?.hospitality_details || '')
   const [confidentialNotes, setConfidentialNotes] = useState(brief?.confidential_notes || '')
 
+  useEffect(() => {
+    if (brief) {
+      setCounterpartName(brief.counterpart_name || '')
+      setCounterpartRole(brief.counterpart_role || '')
+      setMeetingObjective(brief.meeting_objective || '')
+      setTalkingPoints(brief.talking_points || '')
+      setTravelBookingRef(brief.travel_booking_ref || '')
+      setHospitalityDetails(brief.hospitality_details || '')
+      setConfidentialNotes(brief.confidential_notes || '')
+      setEditing(false)
+    }
+  }, [brief])
+
   const formatDate = (iso: string) => {
     return new Date(iso).toLocaleString('it-IT', {
       day: '2-digit',
@@ -1277,10 +1290,11 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
         throw new Error('Risposta vuota ricevuta dal motore AI.')
       }
 
+      const codeFence = String.fromCharCode(96, 96, 96)
       const cleanedJsonStr = rawText
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
+        .replace(new RegExp(`^${codeFence}json\\s*`, 'i'), '')
+        .replace(new RegExp(`^${codeFence}\\s*`, 'i'), '')
+        .replace(new RegExp(`\\s*${codeFence}$`, 'i'), '')
         .trim()
 
       const firstBrace = cleanedJsonStr.indexOf('{')
@@ -1510,7 +1524,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
           .risk { font-size: 11px; font-weight: 700; }
           .meta { background: #f8fafc; padding: 8px 10px; border-radius: 4px; margin-bottom: 8px; }
           .sub { margin-top: 8px; padding-left: 10px; border-left: 3px solid #64748b; }
-          .sub-planb { margin-top: 8px; padding-left: 10px; border-left: 3px solid #047857; background: #f0fdf4; }
+          .sub-planb { margin-top: 8px; padding: 8px 10px; border-left: 3px solid #047857; background: #f0fdf4; }
         </style>
       </head>
       <body>
@@ -2643,11 +2657,29 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                 </div>
 
                 {isBriefExpanded && (
-                  <ExecutiveBriefPanel brief="{brief}" mission="{mission}" onAuditUpdated="{onAuditUpdated}" onBriefSaved="{handleBriefSaved}" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" risk="{risk}" userEmail="{userEmail}" userId="{userId}"/>
+                  <ExecutiveBriefPanel
+                    brief={brief}
+                    mission={mission}
+                    onAuditUpdated={onAuditUpdated}
+                    onBriefSaved={handleBriefSaved}
+                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
+                    risk={risk}
+                    userEmail={userEmail}
+                    userId={userId}
+                  />
                 )}
 
                 {isRiskExpanded && (
-                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()"> runAiRouteRiskAnalysis(mission)}
+                  <MissionRiskPanel
+                    assignedVehicle={mission.assigned_vehicle}
+                    clientVip={mission.client_vip}
+                    dropoffPoint={mission.dropoff_point}
+                    endTime={mission.end_time}
+                    isAdmin={isAdmin}
+                    isAnalyzingAi={isAnalyzingThis}
+                    missionId={mission.id}
+                    notes={mission.notes}
+                    onRunAiAnalysis={() => runAiRouteRiskAnalysis(mission)}
                     onPrintMission={() => handlePrintMission(mission)}
                     onRiskSaved={handleRiskSaved}
                     onAuditUpdated={onAuditUpdated}
