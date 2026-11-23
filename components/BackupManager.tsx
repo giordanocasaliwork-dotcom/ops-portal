@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useMemo, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
@@ -348,7 +348,7 @@ export default function BackupManager({ userEmail, onAuditUpdated }: BackupManag
   }
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl space-y-4">
+    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
