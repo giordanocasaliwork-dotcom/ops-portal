@@ -702,4 +702,547 @@ function ExecutiveBriefPanel({
               Interlocutore &amp; Ruolo
             </div>
             <div className="text-neutral-100 font-semibold">
-              {brief.counterpart
+              {brief.counterpart_name || 'Non specificato'}
+            </div>
+            {brief.counterpart_role && (
+              <div className="text-neutral-400 mt-0.5">{brief.counterpart_role}</div>
+            )}
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+              Obiettivo Strategico
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.meeting_objective || 'Nessun obiettivo registrato.'}
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+              Travel Booking (Voli / Treni / PNR)
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.travel_booking_ref || 'Nessun titolo di viaggio collegato.'}
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+              Ospitalita &amp; Hotel
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.hospitality_details || 'Nessuna prenotazione alberghiera.'}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+              Talking Points &amp; Punti Sensibili
+            </div>
+            <div className="text-neutral-200 whitespace-pre-line">
+              {brief.talking_points || 'Nessun talking point inserito.'}
+            </div>
+          </div>
+
+          {brief.confidential_notes && (
+            <div className="md:col-span-2 bg-amber-950/30 border border-amber-800/70 rounded p-3">
+              <div className="text-[10px] uppercase text-amber-300 font-bold mb-1">
+                Note Riservate Direzione
+              </div>
+              <div className="text-amber-100">{brief.confidential_notes}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-xs text-neutral-500 py-2">
+          Dossier Direzionale non ancora compilato per questa missione.
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface OperatorOption {
+  id: string
+  email: string
+  full_name: string | null
+  callsign: string | null
+  is_active: boolean
+}
+
+interface Vehicle {
+  id: string
+  callsign: string
+  model: string
+  plate: string
+  category: string
+  status: 'available' | 'in_mission' | 'maintenance'
+}
+
+interface GpsCheckInRecord {
+  time: string
+  lat: string
+  lng: string
+  accuracy: number
+}
+
+interface SosAlertRecord {
+  time: string
+  coords: string | null
+  accuracy: number | null
+}
+
+interface MissionBoardProps {
+  initialMissions: Mission[]
+  isAdmin: boolean
+  userEmail: string
+  userId: string
+  onAuditUpdated?: () => void
+}
+
+export default function MissionBoard({
+  initialMissions,
+  isAdmin,
+  userEmail,
+  userId,
+  onAuditUpdated,
+}: MissionBoardProps) {
+  const supabase = useMemo(() => createClient(), [])
+  const router = useRouter()
+
+  const [missions, setMissions] = useState<Mission[]>(initialMissions)
+  const [operators, setOperators] = useState<OperatorOption[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [riskList, setRiskList] = useState<RiskAssessment[]>([])
+  const [briefList, setBriefList] = useState<ExecutiveBrief[]>([])
+
+  const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
+  const [onlyMine, setOnlyMine] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [showFleet, setShowFleet] = useState(false)
+  const [showMorningBrief, setShowMorningBrief] = useState(false)
+  const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
+  const [sendingTelegramBrief, setSendingTelegramBrief] = useState(false)
+  const [telegramBriefStatus, setTelegramBriefStatus] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [checkingInId, setCheckingInId] = useState<string | null>(null)
+  const [lastCheckIns, setLastCheckIns] = useState<{ [id: string]: GpsCheckInRecord }>({})
+
+  const [sosConfirmId, setSosConfirmId] = useState<string | null>(null)
+  const [sendingSosId, setSendingSosId] = useState<string | null>(null)
+  const [sentSosAlerts, setSentSosAlerts] = useState<{ [id: string]: SosAlertRecord }>({})
+
+  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
+  const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
+
+  const [clientVip, setClientVip] = useState('')
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [pickupPoint, setPickupPoint] = useState('')
+  const [dropoffPoint, setDropoffPoint] = useState('')
+  const [assignedOperatorId, setAssignedOperatorId] = useState('')
+  const [assignedVehicleId, setAssignedVehicleId] = useState('')
+  const [manualVehicle, setManualVehicle] = useState('')
+  const [notes, setNotes] = useState('')
+
+  const [vehCallsign, setVehCallsign] = useState('')
+  const [vehModel, setVehModel] = useState('')
+  const [vehPlate, setVehPlate] = useState('')
+  const [vehCategory, setVehCategory] = useState('Executive')
+
+  const buildMapsSearchUrl = (query: string) => {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+  }
+
+  const buildMapsRouteUrl = (origin: string, destination: string) => {
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+  }
+
+  const formatIcsDate = (isoString: string) => {
+    return new Date(isoString).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  }
+
+  const escapeIcsText = (raw: string) => {
+    return raw.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+  }
+
+  const handleDownloadMissionIcs = (mission: Mission) => {
+    const descParts = [
+      `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Assetto: ${mission.assigned_vehicle}`,
+      `Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
+      mission.notes ? `Note: ${mission.notes}` : null,
+    ].filter(Boolean)
+
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Ops Portal//Mission Control//IT',
+      'BEGIN:VEVENT',
+      `UID:mission-${mission.id}@ops-portal`,
+      `DTSTAMP:${formatIcsDate(new Date().toISOString())}`,
+      `DTSTART:${formatIcsDate(mission.start_time)}`,
+      `DTEND:${formatIcsDate(mission.end_time)}`,
+      `SUMMARY:${escapeIcsText(`Movimento: ${mission.client_vip}`)}`,
+      `LOCATION:${escapeIcsText(`${mission.pickup_point} -> ${mission.dropoff_point}`)}`,
+      `DESCRIPTION:${escapeIcsText(descParts.join('\n'))}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ]
+
+    const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `missione-${mission.client_vip.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.ics`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const loadAssets = useCallback(async () => {
+    const opsRes = await supabase
+      .from('profiles')
+      .select('id, email, full_name, callsign, is_active')
+      .eq('is_active', true)
+      .order('callsign', { ascending: true })
+
+    const vehRes = await supabase
+      .from('vehicles')
+      .select('*')
+      .order('callsign', { ascending: true })
+
+    const riskRes = await supabase.from('mission_risk_assessments').select('*')
+
+    if (opsRes.data) setOperators(opsRes.data)
+    if (vehRes.data) setVehicles(vehRes.data)
+    if (riskRes.data) setRiskList(riskRes.data)
+
+    if (isAdmin) {
+      const briefRes = await supabase.from('mission_executive_briefs').select('*')
+      if (briefRes.data) setBriefList(briefRes.data)
+    }
+  }, [supabase, isAdmin])
+
+  useEffect(() => {
+    loadAssets()
+  }, [loadAssets])
+
+  useEffect(() => {
+    if (!sosConfirmId) return
+    const timer = setTimeout(() => {
+      setSosConfirmId(null)
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [sosConfirmId])
+
+  const formatOperatorLabel = (opId?: string | null) => {
+    if (!opId) return 'Non assegnato'
+    const op = operators.find((o) => o.id === opId)
+    if (!op) return 'Operatore assegnato'
+    const name = op.full_name || op.email
+    return op.callsign ? `[${op.callsign}] ${name}` : name
+  }
+
+  const handleRiskSaved = (missionId: string, updated: RiskAssessment) => {
+    setRiskList((prev) => {
+      const exists = prev.some((r) => r.mission_id === missionId)
+      if (exists) {
+        return prev.map((r) => (r.mission_id === missionId ? updated : r))
+      }
+      return [...prev, updated]
+    })
+  }
+
+  const handleBriefSaved = (missionId: string, updated: ExecutiveBrief) => {
+    setBriefList((prev) => {
+      const exists = prev.some((b) => b.mission_id === missionId)
+      if (exists) {
+        return prev.map((b) => (b.mission_id === missionId ? updated : b))
+      }
+      return [...prev, updated]
+    })
+  }
+
+  const generateMorningBriefingText = () => {
+    const todayStr = new Date().toLocaleDateString('it-IT', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+    const todayKey = new Date().toDateString()
+
+    const todayMissions = missions.filter(
+      (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+    )
+    const targetMissions =
+      todayMissions.length > 0
+        ? todayMissions
+        : missions.filter((m) => m.status !== 'chiusa')
+
+    const headerLabel =
+      todayMissions.length > 0
+        ? `AGENDA OPERATIVA ODIERNA (${todayMissions.length} movimentazioni)`
+        : `PROSSIME MOVIMENTAZIONI ATTIVE (${targetMissions.length} pianificate)`
+
+    const lines: string[] = [
+      `MORNING BRIEFING DIREZIONE - ${todayStr.toUpperCase()}`,
+      headerLabel,
+      '----------------------------------------',
+    ]
+
+    if (targetMissions.length === 0) {
+      lines.push('Nessuna movimentazione o appuntamento attivo in agenda.')
+    } else {
+      targetMissions.forEach((m, index) => {
+        const risk = riskList.find((r) => r.mission_id === m.id)
+        const brief = briefList.find((b) => b.mission_id === m.id)
+        const startHour = new Date(m.start_time).toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const endHour = new Date(m.end_time).toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+
+        lines.push(`${index + 1}. [${startHour} - ${endHour}] ${m.client_vip.toUpperCase()}`)
+        lines.push(`   Tratta: ${m.pickup_point} -> ${m.dropoff_point}`)
+        lines.push(`   Assetto: ${m.assigned_vehicle} | Op: ${formatOperatorLabel(m.assigned_operator_id)}`)
+        if (brief?.counterpart_name) {
+          lines.push(
+            `   Incontro: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
+          )
+        }
+        if (brief?.meeting_objective) {
+          lines.push(`   Obiettivo: ${brief.meeting_objective}`)
+        }
+        if (brief?.travel_booking_ref) {
+          lines.push(`   Travel/PNR: ${brief.travel_booking_ref}`)
+        }
+        if (brief?.hospitality_details) {
+          lines.push(`   Ospitalita: ${brief.hospitality_details}`)
+        }
+        if (risk?.threat_level) {
+          lines.push(`   Livello Rischio: ${risk.threat_level}`)
+        }
+        lines.push('')
+      })
+    }
+
+    return lines.join('\n').trim()
+  }
+
+  const handleCopyMorningBriefing = async () => {
+    try {
+      await navigator.clipboard.writeText(generateMorningBriefingText())
+      setCopiedMorningBrief(true)
+      setTimeout(() => setCopiedMorningBrief(false), 2500)
+    } catch {
+      setError('Impossibile copiare il Morning Briefing negli appunti.')
+    }
+  }
+
+  const handlePrintMorningBriefing = () => {
+    const printWin = window.open('', '_blank', 'width=850,height=950')
+    if (!printWin) {
+      setError('Abilita i pop-up del browser per generare il PDF/stampa.')
+      return
+    }
+
+    const escaped = generateMorningBriefingText()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+        <meta charset="utf-8" />
+        <title>Morning Briefing Direzione</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 40px; }
+          .top { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 20px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; color: #444; }
+          pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+        </style>
+      </head>
+      <body>
+        <div class="top">RISERVATO DIREZIONE • MORNING BRIEFING ESECUTIVO</div>
+        <pre>${escaped}</pre>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    printWin.document.close()
+  }
+
+  const handleSendMorningBriefingTelegram = async () => {
+    setSendingTelegramBrief(true)
+    setTelegramBriefStatus(null)
+    setError(null)
+
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('send_telegram_morning_briefing')
+      if (rpcErr) throw rpcErr
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: 'MORNING_BRIEFING_TELEGRAM (INVIO MANUALE)',
+          status: 'SUCCESS',
+        },
+      ])
+
+      setTelegramBriefStatus(String(data || 'Briefing inviato su Telegram'))
+      if (onAuditUpdated) onAuditUpdated()
+      setTimeout(() => setTelegramBriefStatus(null), 4000)
+    } catch (err: any) {
+      setError(err.message || 'Errore invio Morning Briefing su Telegram.')
+    } finally {
+      setSendingTelegramBrief(false)
+    }
+  }
+
+  const handleSosClick = (mission: Mission) => {
+    if (sosConfirmId !== mission.id) {
+      setSosConfirmId(mission.id)
+      return
+    }
+
+    setSosConfirmId(null)
+    setSendingSosId(mission.id)
+    setError(null)
+
+    const me = operators.find((o) => o.id === userId)
+    const opTag = me?.callsign ? `[${me.callsign}]` : userEmail
+
+    const dispatchSosLog = async (coordsText: string | null, accuracyVal: number | null) => {
+      const locationSuffix = coordsText
+        ? `@ ${coordsText} (${accuracyVal}m)`
+        : '- POSIZIONE GPS NON DISPONIBILE'
+
+      const { error: logErr } = await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `SOS_EMERGENCY ${opTag} (${mission.client_vip} - ${mission.status.toUpperCase()}) ${locationSuffix}`,
+          status: 'SOS',
+        },
+      ])
+
+      if (logErr) {
+        setError('Errore invio segnale SOS al database. Contatta subito il Comando via radio/telefono.')
+        setSendingSosId(null)
+        return
+      }
+
+      const nowTime = new Date().toLocaleTimeString('it-IT', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+
+      setSentSosAlerts((prev) => ({
+        ...prev,
+        [mission.id]: {
+          time: nowTime,
+          coords: coordsText,
+          accuracy: accuracyVal,
+        },
+      }))
+      setSendingSosId(null)
+      if (onAuditUpdated) onAuditUpdated()
+    }
+
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      dispatchSosLog(null, null)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude.toFixed(6)
+        const lng = position.coords.longitude.toFixed(6)
+        const accuracy = Math.round(position.coords.accuracy)
+        dispatchSosLog(`${lat}, ${lng}`, accuracy)
+      },
+      () => {
+        dispatchSosLog(null, null)
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+    )
+  }
+
+  const handleGpsCheckIn = (mission: Mission) => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      setError('Geolocalizzazione GPS non supportata da questo dispositivo.')
+      return
+    }
+
+    setCheckingInId(mission.id)
+    setError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude.toFixed(6)
+        const lng = position.coords.longitude.toFixed(6)
+        const accuracy = Math.round(position.coords.accuracy)
+
+        const me = operators.find((o) => o.id === userId)
+        const opTag = me?.callsign ? `[${me.callsign}]` : userEmail
+
+        const { error: logErr } = await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `CHECKIN_GPS ${opTag} (${mission.client_vip} - ${mission.status.toUpperCase()}) @ ${lat}, ${lng} (${accuracy}m)`,
+            status: 'CHECK-IN',
+          },
+        ])
+
+        if (logErr) {
+          setError('Coordinate GPS rilevate ma errore nella registrazione su Audit Log.')
+          setCheckingInId(null)
+          return
+        }
+
+        const nowTime = new Date().toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+
+        setLastCheckIns((prev) => ({
+          ...prev,
+          [mission.id]: { time: nowTime, lat, lng, accuracy },
+        }))
+        setCheckingInId(null)
+        if (onAuditUpdated) onAuditUpdated()
+      },
+      (geoError) => {
+        let msg = 'Impossibile acquisire la posizione GPS.'
+        if (geoError.code === 1) {
+          msg = 'Permesso GPS negato: autorizza la posizione nelle impostazioni del browser.'
+        } else if (geoError.code === 2) {
+          msg = 'Segnale GPS non disponibile in questa posizione.'
+        } else if (geoError.code === 3) {
+          msg = 'Timeout rilevamento GPS. Riprova in area aperta.'
+        }
+        setError(msg)
+        setCheckingInId(null)
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    )
+  }
+
+  const handleAddVehicle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const cleanCallsign = vehCallsign.trim().toUpperCase()
