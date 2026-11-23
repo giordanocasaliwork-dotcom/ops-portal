@@ -2635,10 +2635,16 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                 )}
 
                 {isRiskExpanded && (
-                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" pickupPoint="{mission.pickup_point}" risk="{risk}" startTime="{mission.start_time}" userEmail="{userEmail}" userId="{userId}"> runAiRouteRiskAnalysis(mission)}
+                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()"> runAiRouteRiskAnalysis(mission)}
                     onPrintMission={() => handlePrintMission(mission)}
                     onRiskSaved={handleRiskSaved}
                     onAuditUpdated={onAuditUpdated}
+                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
+                    pickupPoint={mission.pickup_point}
+                    risk={risk}
+                    startTime={mission.start_time}
+                    userEmail={userEmail}
+                    userId={userId}
                   />
                 )}
               </div>
