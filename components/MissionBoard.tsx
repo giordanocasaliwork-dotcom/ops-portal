@@ -2631,29 +2631,11 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                 </div>
 
                 {isBriefExpanded && (
-                  <ExecutiveBriefPanel
-                    brief={brief}
-                    mission={mission}
-                    onAuditUpdated={onAuditUpdated}
-                    onBriefSaved={handleBriefSaved}
-                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
-                    risk={risk}
-                    userEmail={userEmail}
-                    userId={userId}
-                  />
+                  <ExecutiveBriefPanel brief="{brief}" mission="{mission}" onAuditUpdated="{onAuditUpdated}" onBriefSaved="{handleBriefSaved}" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" risk="{risk}" userEmail="{userEmail}" userId="{userId}"/>
                 )}
 
                 {isRiskExpanded && (
-                  <MissionRiskPanel
-                    assignedVehicle={mission.assigned_vehicle}
-                    clientVip={mission.client_vip}
-                    dropoffPoint={mission.dropoff_point}
-                    endTime={mission.end_time}
-                    isAdmin={isAdmin}
-                    isAnalyzingAi={isAnalyzingThis}
-                    missionId={mission.id}
-                    notes={mission.notes}
-                    onRunAiAnalysis={() => runAiRouteRiskAnalysis(mission)}
+                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()"> runAiRouteRiskAnalysis(mission)}
                     onPrintMission={() => handlePrintMission(mission)}
                     onRiskSaved={handleRiskSaved}
                     onAuditUpdated={onAuditUpdated}
@@ -2665,3 +2647,15 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                     userId={userId}
                   />
                 )}
+              </div>
+            )
+          })
+        ) : (
+          <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
+            Nessuna missione presente per il filtro selezionato.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
