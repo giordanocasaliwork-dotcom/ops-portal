@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
@@ -10,7 +10,7 @@ export interface ExecutiveContact {
   organization: string | null
   role_title: string | null
   category: string
-  access_tier: 'DIRECT' | 'FILTER' | 'RESTRICTED'
+  access_tier: 'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
   nda_status: 'ATTIVO' | 'IN CORSO' | 'NON RICHIESTO'
   phone: string | null
   email: string | null
@@ -39,42 +39,39 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [tierFilter, setTierFilter] = useState<'ALL' | 'DIRECT' | 'FILTER' | 'RESTRICTED'>('ALL')
+  const [contactSearch, setContactSearch] = useState('')
+  const [tierFilter, setTierFilter] = useState<
+    'TUTTI' | 'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
+  >('TUTTI')
   const [showContactForm, setShowContactForm] = useState(false)
+  const [contactName, setContactName] = useState('')
+  const [contactOrg, setContactOrg] = useState('')
+  const [contactRole, setContactRole] = useState('')
+  const [contactCategory, setContactCategory] = useState('Cliente / Partner')
+  const [contactTier, setContactTier] = useState<
+    'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
+  >('FILTRO SEGRETERIA')
+  const [contactNda, setContactNda] = useState<'ATTIVO' | 'IN CORSO' | 'NON RICHIESTO'>(
+    'NON RICHIESTO'
+  )
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactNotes, setContactNotes] = useState('')
 
-  const [fullName, setFullName] = useState('')
-  const [organization, setOrganization] = useState('')
-  const [roleTitle, setRoleTitle] = useState('')
-  const [contactCategory, setContactCategory] = useState('Cliente Chiave')
-  const [accessTier, setAccessTier] = useState<'DIRECT' | 'FILTER' | 'RESTRICTED'>('FILTER')
-  const [ndaStatus, setNdaStatus] = useState<'ATTIVO' | 'IN CORSO' | 'NON RICHIESTO'>('NON RICHIESTO')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [relationshipNotes, setRelationshipNotes] = useState('')
-
-  const [prefFilter, setPrefFilter] = useState<string>('TUTTE')
+  const [prefCategoryFilter, setPrefCategoryFilter] = useState('TUTTE')
   const [showPrefForm, setShowPrefForm] = useState(false)
-  const [copiedPrefs, setCopiedPrefs] = useState(false)
-
   const [prefCategory, setPrefCategory] = useState('Viaggi & Voli')
   const [prefTitle, setPrefTitle] = useState('')
   const [prefDetails, setPrefDetails] = useState('')
 
   const loadExecutiveData = useCallback(async () => {
     const [contactsRes, prefsRes] = await Promise.all([
-      supabase
-        .from('executive_contacts')
-        .select('*')
-        .order('full_name', { ascending: true }),
-      supabase
-        .from('vip_preferences')
-        .select('*')
-        .order('category', { ascending: true }),
+      supabase.from('executive_contacts').select('*').order('full_name', { ascending: true }),
+      supabase.from('vip_preferences').select('*').order('category', { ascending: true }),
     ])
 
-    if (contactsRes.data) setContacts(contactsRes.data)
-    if (prefsRes.data) setPreferences(prefsRes.data)
+    if (contactsRes.data) setContacts(contactsRes.data as ExecutiveContact[])
+    if (prefsRes.data) setPreferences(prefsRes.data as VipPreference[])
   }, [supabase])
 
   useEffect(() => {
@@ -87,52 +84,52 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     setError(null)
 
     try {
-      const { error: insertErr } = await supabase.from('executive_contacts').insert([
+      const { error: insErr } = await supabase.from('executive_contacts').insert([
         {
-          full_name: fullName.trim(),
-          organization: organization.trim() || null,
-          role_title: roleTitle.trim() || null,
+          full_name: contactName.trim(),
+          organization: contactOrg.trim() || null,
+          role_title: contactRole.trim() || null,
           category: contactCategory,
-          access_tier: accessTier,
-          nda_status: ndaStatus,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          relationship_notes: relationshipNotes.trim() || null,
+          access_tier: contactTier,
+          nda_status: contactNda,
+          phone: contactPhone.trim() || null,
+          email: contactEmail.trim() || null,
+          relationship_notes: contactNotes.trim() || null,
         },
       ])
 
-      if (insertErr) throw insertErr
+      if (insErr) throw insErr
 
       await supabase.from('audit_logs').insert([
         {
           user_email: userEmail,
-          action: `EXEC_CONTACT_ADD: ${fullName.trim()} [${accessTier}]`,
+          action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
           status: 'SUCCESS',
         },
       ])
 
-      setFullName('')
-      setOrganization('')
-      setRoleTitle('')
-      setContactCategory('Cliente Chiave')
-      setAccessTier('FILTER')
-      setNdaStatus('NON RICHIESTO')
-      setPhone('')
-      setEmail('')
-      setRelationshipNotes('')
+      setContactName('')
+      setContactOrg('')
+      setContactRole('')
+      setContactCategory('Cliente / Partner')
+      setContactTier('FILTRO SEGRETERIA')
+      setContactNda('NON RICHIESTO')
+      setContactPhone('')
+      setContactEmail('')
+      setContactNotes('')
       setShowContactForm(false)
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
-      setError(err.message || 'Errore salvataggio contatto strategico.')
+      setError(err.message || 'Errore salvataggio contatto in rubrica.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleChangeAccessTier = async (
+  const handleUpdateContactTier = async (
     contact: ExecutiveContact,
-    newTier: 'DIRECT' | 'FILTER' | 'RESTRICTED'
+    newTier: ExecutiveContact['access_tier']
   ) => {
     const { error: updErr } = await supabase
       .from('executive_contacts')
@@ -140,14 +137,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       .eq('id', contact.id)
 
     if (updErr) {
-      setError('Impossibile aggiornare il livello di gatekeeping.')
+      setError('Impossibile aggiornare livello gatekeeping.')
       return
     }
 
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: `GATEKEEPING_UPDATE: ${contact.full_name} -> ${newTier}`,
+        action: `CONTACT_TIER_UPDATE: ${contact.full_name} -> ${newTier}`,
         status: 'SUCCESS',
       },
     ])
@@ -163,14 +160,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       .eq('id', contact.id)
 
     if (delErr) {
-      setError('Errore rimozione contatto.')
+      setError('Errore eliminazione contatto.')
       return
     }
 
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: `EXEC_CONTACT_DELETE: ${contact.full_name}`,
+        action: `CONTACT_DELETE: ${contact.full_name}`,
         status: 'SUCCESS',
       },
     ])
@@ -185,7 +182,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     setError(null)
 
     try {
-      const { error: insertErr } = await supabase.from('vip_preferences').insert([
+      const { error: insErr } = await supabase.from('vip_preferences').insert([
         {
           category: prefCategory,
           title: prefTitle.trim(),
@@ -193,12 +190,12 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
         },
       ])
 
-      if (insertErr) throw insertErr
+      if (insErr) throw insErr
 
       await supabase.from('audit_logs').insert([
         {
           user_email: userEmail,
-          action: `VIP_PREF_ADD: [${prefCategory}] ${prefTitle.trim()}`,
+          action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
           status: 'SUCCESS',
         },
       ])
@@ -238,64 +235,39 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     if (onAuditUpdated) onAuditUpdated()
   }
 
-  const handleCopyAllPreferences = async () => {
-    if (preferences.length === 0) return
-
-    const lines = [
-      'STANDARD & PREFERENZE DIREZIONE (USO PRENOTAZIONI)',
-      '--------------------------------------------------',
-      ...preferences.map((p) => `[${p.category.toUpperCase()}] ${p.title}: ${p.details}`),
-    ]
-
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'))
-      setCopiedPrefs(true)
-      setTimeout(() => setCopiedPrefs(false), 2500)
-    } catch {
-      setError('Impossibile copiare le preferenze negli appunti.')
-    }
-  }
-
-  const accessBadge = (tier: ExecutiveContact['access_tier']) => {
-    if (tier === 'DIRECT') {
-      return {
-        label: 'ACCESSO DIRETTO',
-        classes: 'bg-emerald-950/80 text-emerald-300 border-emerald-700',
-      }
-    }
-    if (tier === 'RESTRICTED') {
-      return {
-        label: 'RISERVATO / BLOCCO',
-        classes: 'bg-red-950/80 text-red-300 border-red-700',
-      }
-    }
-    return {
-      label: 'FILTRO SEGRETERIA',
-      classes: 'bg-amber-950/70 text-amber-300 border-amber-700',
-    }
-  }
-
-  const ndaBadge = (status: ExecutiveContact['nda_status']) => {
-    if (status === 'ATTIVO') return 'bg-emerald-950/50 text-emerald-300 border-emerald-800'
-    if (status === 'IN CORSO') return 'bg-amber-950/50 text-amber-300 border-amber-800'
-    return 'bg-neutral-900 text-neutral-400 border-neutral-800'
-  }
-
   const filteredContacts = contacts.filter((c) => {
-    if (tierFilter !== 'ALL' && c.access_tier !== tierFilter) return false
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    const hay = `${c.full_name} ${c.organization || ''} ${c.role_title || ''} ${c.category} ${c.relationship_notes || ''}`.toLowerCase()
+    if (tierFilter !== 'TUTTI' && c.access_tier !== tierFilter) return false
+    if (!contactSearch.trim()) return true
+    const q = contactSearch.toLowerCase()
+    const hay = `${c.full_name} ${c.organization || ''} ${c.role_title || ''} ${c.category} ${
+      c.phone || ''
+    } ${c.email || ''} ${c.relationship_notes || ''}`.toLowerCase()
     return hay.includes(q)
   })
 
   const filteredPreferences = preferences.filter((p) =>
-    prefFilter === 'TUTTE' ? true : p.category === prefFilter
+    prefCategoryFilter === 'TUTTE' ? true : p.category === prefCategoryFilter
   )
 
+  const tierBadge = (tier: ExecutiveContact['access_tier']) => {
+    if (tier === 'ACCESSO DIRETTO') {
+      return 'bg-emerald-950/80 text-emerald-300 border-emerald-600'
+    }
+    if (tier === 'RISERVATO / BLOCCO') {
+      return 'bg-red-950/80 text-red-300 border-red-600'
+    }
+    return 'bg-amber-950/80 text-amber-300 border-amber-600'
+  }
+
+  const ndaBadge = (nda: ExecutiveContact['nda_status']) => {
+    if (nda === 'ATTIVO') return 'bg-sky-950/80 text-sky-300 border-sky-700'
+    if (nda === 'IN CORSO') return 'bg-amber-950/60 text-amber-300 border-amber-700'
+    return 'bg-neutral-900 text-neutral-400 border-neutral-700'
+  }
+
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
+    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-yellow-500/30 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 text-[10px] font-bold uppercase">
@@ -306,7 +278,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             </h2>
           </div>
           <p className="text-xs text-neutral-500 mt-1">
-            Gestione priorita interlocutori, stato NDA e standard ricorrenti per viaggi e ospitalita
+            Regole di filtro chiamate/accessi, stato NDA e standard operativi permanenti della Direzione
           </p>
         </div>
 
@@ -317,7 +289,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             className={
               'px-3 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
               (activeTab === 'contacts'
-                ? 'bg-amber-300 text-neutral-950 border-amber-300'
+                ? 'bg-amber-400 text-neutral-950 border-amber-400'
                 : 'bg-neutral-950 text-neutral-300 border-neutral-700 hover:border-neutral-500')
             }
           >
@@ -330,7 +302,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             className={
               'px-3 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
               (activeTab === 'preferences'
-                ? 'bg-amber-300 text-neutral-950 border-amber-300'
+                ? 'bg-amber-400 text-neutral-950 border-amber-400'
                 : 'bg-neutral-950 text-neutral-300 border-neutral-700 hover:border-neutral-500')
             }
           >
@@ -351,31 +323,32 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cerca nome, societa, ruolo o note..."
-                className="bg-neutral-950 border border-neutral-800 rounded px-3 py-1.5 text-xs text-neutral-200 w-64 focus:outline-none focus:border-neutral-600"
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                placeholder="Cerca nominativo, societa, telefono..."
+                className="bg-neutral-950 border border-neutral-800 rounded px-3 py-1.5 text-xs text-neutral-200 w-60 focus:outline-none focus:border-neutral-600"
               />
 
-              {(['ALL', 'DIRECT', 'FILTER', 'RESTRICTED'] as const).map((tier) => (
+              {(
+                [
+                  'TUTTI',
+                  'ACCESSO DIRETTO',
+                  'FILTRO SEGRETERIA',
+                  'RISERVATO / BLOCCO',
+                ] as const
+              ).map((tier) => (
                 <button
                   key={tier}
                   type="button"
                   onClick={() => setTierFilter(tier)}
                   className={
-                    'px-2.5 py-1 rounded text-[11px] uppercase border transition ' +
+                    'px-2 py-1 rounded text-[10px] uppercase border transition ' +
                     (tierFilter === tier
                       ? 'bg-neutral-200 text-neutral-950 border-neutral-200 font-bold'
                       : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-600')
                   }
                 >
-                  {tier === 'ALL'
-                    ? 'Tutti'
-                    : tier === 'DIRECT'
-                    ? 'Diretti'
-                    : tier === 'FILTER'
-                    ? 'Filtro'
-                    : 'Blocco'}
+                  {tier}
                 </button>
               ))}
             </div>
@@ -383,7 +356,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             <button
               type="button"
               onClick={() => setShowContactForm(!showContactForm)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition self-start md:self-auto"
+              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition self-start md:self-auto shrink-0"
             >
               {showContactForm ? 'Chiudi Modulo' : '+ Nuovo Contatto'}
             </button>
@@ -392,10 +365,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
           {showContactForm && (
             <form
               onSubmit={handleAddContact}
-              className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4 text-xs"
+              className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-3 text-xs"
             >
               <div className="text-xs uppercase tracking-wider text-amber-300 font-semibold">
-                Scheda Nuovo Contatto Strategico
+                Nuovo Profilo Rubrica Strategica &amp; Gatekeeping
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -406,22 +379,22 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   <input
                     type="text"
                     required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Es. Dott. Marco Ferretti"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="Es. Avv. Marco Rossi"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Societa / Ente
+                    Societa / Studio / Istituzione
                   </label>
                   <input
                     type="text"
-                    value={organization}
-                    onChange={(e) => setOrganization(e.target.value)}
-                    placeholder="Organizzazione o studio"
+                    value={contactOrg}
+                    onChange={(e) => setContactOrg(e.target.value)}
+                    placeholder="Denominazione organizzazione"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
                 </div>
@@ -432,11 +405,33 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   </label>
                   <input
                     type="text"
-                    value={roleTitle}
-                    onChange={(e) => setRoleTitle(e.target.value)}
-                    placeholder="Es. Managing Partner / Avvocato"
+                    value={contactRole}
+                    onChange={(e) => setContactRole(e.target.value)}
+                    placeholder="Es. Managing Partner / Advisor"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                    Regola Gatekeeping *
+                  </label>
+                  <select
+                    value={contactTier}
+                    onChange={(e) =>
+                      setContactTier(
+                        e.target.value as
+                          | 'ACCESSO DIRETTO'
+                          | 'FILTRO SEGRETERIA'
+                          | 'RISERVATO / BLOCCO'
+                      )
+                    }
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                  >
+                    <option value="ACCESSO DIRETTO">ACCESSO DIRETTO (Passare subito)</option>
+                    <option value="FILTRO SEGRETERIA">FILTRO SEGRETERIA (Verificare oggetto)</option>
+                    <option value="RISERVATO / BLOCCO">RISERVATO / BLOCCO (Non trasferire)</option>
+                  </select>
                 </div>
 
                 <div>
@@ -448,56 +443,41 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     onChange={(e) => setContactCategory(e.target.value)}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   >
-                    <option value="Cliente Chiave">Cliente Chiave</option>
-                    <option value="Partner Strategico">Partner Strategico</option>
-                    <option value="Istituzioni / FFOO">Istituzioni / FFOO</option>
-                    <option value="Legal & Finance">Legal &amp; Finance</option>
-                    <option value="Staff / Interno">Staff / Interno</option>
+                    <option value="Cliente / Partner">Cliente / Partner</option>
+                    <option value="Legale / Fiscale">Legale / Fiscale</option>
+                    <option value="Istituzionale">Istituzionale</option>
+                    <option value="Famiglia / Privato">Famiglia / Privato</option>
+                    <option value="Altro">Altro</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Regola Gatekeeping *
+                    Stato NDA
                   </label>
                   <select
-                    value={accessTier}
+                    value={contactNda}
                     onChange={(e) =>
-                      setAccessTier(e.target.value as 'DIRECT' | 'FILTER' | 'RESTRICTED')
-                    }
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
-                  >
-                    <option value="DIRECT">DIRECT - Passa subito alla Direzione</option>
-                    <option value="FILTER">FILTER - Filtro Assistente / Segreteria</option>
-                    <option value="RESTRICTED">RESTRICTED - Riservato / Non trasferire</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Stato Accordo Riservatezza (NDA)
-                  </label>
-                  <select
-                    value={ndaStatus}
-                    onChange={(e) =>
-                      setNdaStatus(e.target.value as 'ATTIVO' | 'IN CORSO' | 'NON RICHIESTO')
+                      setContactNda(
+                        e.target.value as 'ATTIVO' | 'IN CORSO' | 'NON RICHIESTO'
+                      )
                     }
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   >
                     <option value="NON RICHIESTO">NON RICHIESTO</option>
+                    <option value="IN CORSO">IN CORSO</option>
                     <option value="ATTIVO">ATTIVO (Firmato)</option>
-                    <option value="IN CORSO">IN CORSO (In verifica)</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Recapito Telefonico / Diretto
+                    Telefono Diretto / Segreteria
                   </label>
                   <input
                     type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
                     placeholder="+39 ..."
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
@@ -505,12 +485,12 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Email / Segreteria Controparte
+                    Email
                   </label>
                   <input
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
                     placeholder="nome@dominio.it"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
@@ -518,13 +498,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Note Relazionali &amp; Istruzioni Filtro
+                    Note Relazionali / Nome Assistente
                   </label>
                   <input
                     type="text"
-                    value={relationshipNotes}
-                    onChange={(e) => setRelationshipNotes(e.target.value)}
-                    placeholder="Es. Assistente: Giulia - Chiamare solo dopo le 15:00"
+                    value={contactNotes}
+                    onChange={(e) => setContactNotes(e.target.value)}
+                    placeholder="Es. Assistente: Laura - Preferisce contatto mattutino"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
                 </div>
@@ -536,103 +516,97 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   disabled={loading}
                   className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-5 py-2 rounded transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Registra in Rubrica'}
+                  {loading ? 'Salvataggio...' : 'Salva in Rubrica'}
                 </button>
               </div>
             </form>
           )}
 
           {filteredContacts.length > 0 ? (
-            <div className="space-y-2.5">
-              {filteredContacts.map((contact) => {
-                const badge = accessBadge(contact.access_tier)
-                return (
-                  <div
-                    key={contact.id}
-                    className="bg-neutral-950 border border-neutral-800/90 rounded-lg p-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 text-xs"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${badge.classes}`}
-                        >
-                          {badge.label}
-                        </span>
-                        <span className="text-sm font-bold text-neutral-100">
-                          {contact.full_name}
-                        </span>
-                        {contact.organization && (
-                          <span className="text-amber-300 font-semibold">
-                            • {contact.organization}
-                          </span>
-                        )}
-                        {contact.role_title && (
-                          <span className="text-neutral-400">({contact.role_title})</span>
-                        )}
-                        <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-neutral-300">
-                          {contact.category}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${ndaBadge(
-                            contact.nda_status
-                          )}`}
-                        >
-                          NDA: {contact.nda_status}
-                        </span>
-                      </div>
+            <div className="space-y-2.5 text-xs">
+              {filteredContacts.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-neutral-950 border border-neutral-800/90 rounded-lg p-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${tierBadge(
+                          c.access_tier
+                        )}`}
+                      >
+                        {c.access_tier}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${ndaBadge(
+                          c.nda_status
+                        )}`}
+                      >
+                        NDA: {c.nda_status}
+                      </span>
+                      <span className="text-[11px] text-neutral-400">{c.category}</span>
+                    </div>
 
-                      <div className="flex flex-wrap items-center gap-3 text-neutral-300">
-                        {contact.phone && (
-                          <span>
-                            <span className="text-neutral-500">Tel:</span> {contact.phone}
-                          </span>
-                        )}
-                        {contact.email && (
-                          <span>
-                            <span className="text-neutral-500">Email:</span> {contact.email}
-                          </span>
-                        )}
-                      </div>
-
-                      {contact.relationship_notes && (
-                        <div className="text-neutral-400 italic">
-                          Note Filtro: {contact.relationship_notes}
-                        </div>
+                    <div className="text-sm font-bold text-neutral-100">
+                      {c.full_name}
+                      {c.organization && (
+                        <span className="text-amber-300 font-normal"> — {c.organization}</span>
+                      )}
+                      {c.role_title && (
+                        <span className="text-neutral-400 font-normal"> ({c.role_title})</span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
-                      <select
-                        aria-label="Livello Gatekeeping"
-                        value={contact.access_tier}
-                        onChange={(e) =>
-                          handleChangeAccessTier(
-                            contact,
-                            e.target.value as 'DIRECT' | 'FILTER' | 'RESTRICTED'
-                          )
-                        }
-                        className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5"
-                      >
-                        <option value="DIRECT">Accesso Diretto</option>
-                        <option value="FILTER">Filtro Segreteria</option>
-                        <option value="RESTRICTED">Riservato / Blocco</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteContact(contact)}
-                        className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
-                      >
-                        Elimina
-                      </button>
+                    <div className="flex flex-wrap items-center gap-3 text-neutral-300">
+                      {c.phone && (
+                        <span>
+                          <span className="text-neutral-500">Tel:</span> {c.phone}
+                        </span>
+                      )}
+                      {c.email && (
+                        <span>
+                          <span className="text-neutral-500">Email:</span> {c.email}
+                        </span>
+                      )}
                     </div>
+
+                    {c.relationship_notes && (
+                      <div className="text-neutral-400 italic">{c.relationship_notes}</div>
+                    )}
                   </div>
-                )
-              })}
+
+                  <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
+                    <select
+                      aria-label="Livello gatekeeping"
+                      value={c.access_tier}
+                      onChange={(e) =>
+                        handleUpdateContactTier(
+                          c,
+                          e.target.value as ExecutiveContact['access_tier']
+                        )
+                      }
+                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5"
+                    >
+                      <option value="ACCESSO DIRETTO">Accesso Diretto</option>
+                      <option value="FILTRO SEGRETERIA">Filtro Segreteria</option>
+                      <option value="RISERVATO / BLOCCO">Riservato / Blocco</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteContact(c)}
+                      className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
-              Nessun contatto strategico trovato con i filtri attuali.
+              Nessun contatto trovato in rubrica per il filtro selezionato.
             </div>
           )}
         </div>
@@ -654,10 +628,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setPrefFilter(cat)}
+                  onClick={() => setPrefCategoryFilter(cat)}
                   className={
                     'px-2.5 py-1 rounded text-[11px] uppercase border transition ' +
-                    (prefFilter === cat
+                    (prefCategoryFilter === cat
                       ? 'bg-neutral-200 text-neutral-950 border-neutral-200 font-bold'
                       : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-600')
                   }
@@ -667,24 +641,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
-              {preferences.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleCopyAllPreferences}
-                  className="bg-neutral-950 hover:bg-neutral-800 text-amber-200 border border-amber-800 text-xs uppercase px-3 py-1.5 rounded transition"
-                >
-                  {copiedPrefs ? 'Standard Copiati' : 'Copia Standard Prenotazioni'}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowPrefForm(!showPrefForm)}
-                className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
-              >
-                {showPrefForm ? 'Chiudi Modulo' : '+ Nuova Preferenza'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowPrefForm(!showPrefForm)}
+              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
+            >
+              {showPrefForm ? 'Chiudi Modulo' : '+ Nuova Preferenza'}
+            </button>
           </div>
 
           {showPrefForm && (
@@ -693,13 +656,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
               className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-3 text-xs"
             >
               <div className="text-xs uppercase tracking-wider text-amber-300 font-semibold">
-                Nuovo Standard / Preferenza Direzione
+                Nuovo Standard / Preferenza Permanente Direzione
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Area *
+                    Area Operativa
                   </label>
                   <select
                     value={prefCategory}
@@ -715,31 +678,31 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
                 <div>
                   <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Voce / Etichetta *
+                    Titolo / Voce *
                   </label>
                   <input
                     type="text"
                     required
                     value={prefTitle}
                     onChange={(e) => setPrefTitle(e.target.value)}
-                    placeholder="Es. Posto Volo / Regime Alimentare / Catena Hotel"
+                    placeholder="Es. Posto Aereo / Intolleranze / Tipologia Suite"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                    Dettaglio Operativo *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={prefDetails}
-                    onChange={(e) => setPrefDetails(e.target.value)}
-                    placeholder="Es. Prima fila corridoio, no latticini, camera piano alto silenziosa"
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                  Dettagli &amp; Standard Richiesti *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={prefDetails}
+                  onChange={(e) => setPrefDetails(e.target.value)}
+                  placeholder="Specifiche esatte da applicare automaticamente a ogni prenotazione"
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                />
               </div>
 
               <div className="flex justify-end">
@@ -748,7 +711,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   disabled={loading}
                   className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-5 py-2 rounded transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Salva Preferenza'}
+                  {loading ? 'Salvataggio...' : 'Registra Preferenza'}
                 </button>
               </div>
             </form>
@@ -756,21 +719,22 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {filteredPreferences.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              {filteredPreferences.map((pref) => (
+              {filteredPreferences.map((p) => (
                 <div
-                  key={pref.id}
+                  key={p.id}
                   className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5 flex items-start justify-between gap-3"
                 >
                   <div className="space-y-1">
-                    <span className="inline-block px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/70 text-[10px] font-bold uppercase">
-                      {pref.category}
+                    <span className="inline-block px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800 text-[10px] font-bold uppercase">
+                      {p.category}
                     </span>
-                    <div className="text-neutral-100 font-bold">{pref.title}</div>
-                    <div className="text-neutral-300 leading-relaxed">{pref.details}</div>
+                    <div className="text-sm font-bold text-neutral-100">{p.title}</div>
+                    <div className="text-neutral-300 whitespace-pre-line">{p.details}</div>
                   </div>
+
                   <button
                     type="button"
-                    onClick={() => handleDeletePreference(pref)}
+                    onClick={() => handleDeletePreference(p)}
                     className="text-neutral-500 hover:text-red-400 text-[11px] uppercase shrink-0"
                   >
                     Rimuovi
@@ -780,7 +744,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             </div>
           ) : (
             <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
-              Nessuna preferenza registrata in questa categoria.
+              Nessuna preferenza registrata per questa categoria.
             </div>
           )}
         </div>
