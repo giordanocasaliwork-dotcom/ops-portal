@@ -44,6 +44,15 @@ export interface ExecutiveBrief {
   updated_at?: string
 }
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const msg = (err as { message?: unknown }).message
+    if (typeof msg === 'string' && msg.trim()) return msg
+  }
+  return fallback
+}
+
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -176,8 +185,8 @@ function MissionRiskPanel({
       }
       if (onAuditUpdated) onAuditUpdated()
       setEditing(false)
-    } catch (err: any) {
-      setPanelError(err.message || 'Errore salvataggio scheda Risk Assessment.')
+    } catch (err: unknown) {
+      setPanelError(getErrorMessage(err, 'Errore salvataggio scheda Risk Assessment.'))
     } finally {
       setSaving(false)
     }
@@ -555,8 +564,8 @@ function ExecutiveBriefPanel({
       }
       if (onAuditUpdated) onAuditUpdated()
       setEditing(false)
-    } catch (err: any) {
-      setBriefError(err.message || 'Errore salvataggio Dossier Direzionale.')
+    } catch (err: unknown) {
+      setBriefError(getErrorMessage(err, 'Errore salvataggio Dossier Direzionale.'))
     } finally {
       setSaving(false)
     }
@@ -929,6 +938,27 @@ export default function MissionBoard({
     return raw.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
   }
 
+  const formatDateTime = (iso: string) => {
+    return new Date(iso).toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const formatOperatorLabel = useCallback(
+    (opId?: string | null) => {
+      if (!opId) return 'Non assegnato'
+      const op = operators.find((o) => o.id === opId)
+      if (!op) return 'Operatore assegnato'
+      const name = op.full_name || op.email
+      return op.callsign ? `[${op.callsign}] ${name}` : name
+    },
+    [operators]
+  )
+
   const handleDownloadMissionIcs = (mission: Mission) => {
     const risk = riskList.find((r) => r.mission_id === mission.id)
     const descParts = [
@@ -1145,14 +1175,6 @@ export default function MissionBoard({
     return () => clearTimeout(timer)
   }, [sosConfirmId])
 
-  const formatOperatorLabel = (opId?: string | null) => {
-    if (!opId) return 'Non assegnato'
-    const op = operators.find((o) => o.id === opId)
-    if (!op) return 'Operatore assegnato'
-    const name = op.full_name || op.email
-    return op.callsign ? `[${op.callsign}] ${name}` : name
-  }
-
   const handleRiskSaved = (missionId: string, updated: RiskAssessment) => {
     setRiskList((prev) => {
       const exists = prev.some((r) => r.mission_id === missionId)
@@ -1308,8 +1330,8 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
         handleRiskSaved(mission.id, savedRow as RiskAssessment)
       }
       if (onAuditUpdated) onAuditUpdated()
-    } catch (err: any) {
-      setError(err.message || 'Impossibile completare l analisi AI del percorso.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Impossibile completare l analisi AI del percorso.'))
     } finally {
       setAnalyzingMissionId(null)
     }
@@ -1488,7 +1510,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
           .risk { font-size: 11px; font-weight: 700; }
           .meta { background: #f8fafc; padding: 8px 10px; border-radius: 4px; margin-bottom: 8px; }
           .sub { margin-top: 8px; padding-left: 10px; border-left: 3px solid #64748b; }
-          .sub-planb { margin-top: 8px; padding: 8px 10px; border-left: 3px solid #047857; background: #f0fdf4; }
+          .sub-planb { margin-top: 8px; padding-left: 10px; border-left: 3px solid #047857; background: #f0fdf4; }
         </style>
       </head>
       <body>
@@ -1524,8 +1546,8 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
       setTelegramBriefStatus(String(data || 'Briefing inviato su Telegram'))
       if (onAuditUpdated) onAuditUpdated()
       setTimeout(() => setTelegramBriefStatus(null), 4000)
-    } catch (err: any) {
-      setError(err.message || 'Errore invio Morning Briefing su Telegram.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Errore invio Morning Briefing su Telegram.'))
     } finally {
       setSendingTelegramBrief(false)
     }
@@ -1696,8 +1718,8 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
       setVehCategory('Executive')
       await loadAssets()
       if (onAuditUpdated) onAuditUpdated()
-    } catch (err: any) {
-      setError(err.message || 'Errore registrazione veicolo in flotta.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Errore registrazione veicolo in flotta.'))
     } finally {
       setLoading(false)
     }
@@ -1786,8 +1808,8 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
       if (createdMission && autoAiOnCreate) {
         await runAiRouteRiskAnalysis(createdMission)
       }
-    } catch (err: any) {
-      setError(err.message || 'Errore durante la creazione della missione.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Errore durante la creazione della missione.'))
     } finally {
       setLoading(false)
     }
@@ -1894,16 +1916,6 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
     if (onlyMine && m.assigned_operator_id !== userId) return false
     return filter === 'tutte' ? true : m.status === filter
   })
-
-  const formatDateTime = (iso: string) => {
-    return new Date(iso).toLocaleString('it-IT', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
 
   const statusBadge = (status: Mission['status']) => {
     if (status === 'pianificata') return 'bg-amber-950/60 text-amber-300 border-amber-800'
