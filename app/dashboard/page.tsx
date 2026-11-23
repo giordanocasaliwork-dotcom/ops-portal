@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
-import ExecutiveAppointments from '../../components/ExecutiveAppointments'
+import ExecutiveAppointments, {
+  ExecutiveAppointment,
+} from '../../components/ExecutiveAppointments'
 import ExecutiveHub from '../../components/ExecutiveHub'
 import OperationsControl from '../../components/OperationsControl'
 import SopChecklists from '../../components/SopChecklists'
@@ -19,9 +21,13 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string>('operator')
   const [callsign, setCallsign] = useState<string | null>(null)
   const [missions, setMissions] = useState<Mission[]>([])
+  const [todayAppointments, setTodayAppointments] = useState<ExecutiveAppointment[]>([])
   const [logs, setLogs] = useState<any[]>([])
   const [dismissedSosId, setDismissedSosId] = useState<string | null>(null)
   const [archivingSos, setArchivingSos] = useState(false)
+
+  // Vista dedicata eventi odierni attivabile dal pulsante KPI "Agenda Oggi"
+  const [showTodayFocus, setShowTodayFocus] = useState(false)
 
   // KPI situazionali in tempo reale
   const [todayEventsCount, setTodayEventsCount] = useState<number>(0)
@@ -61,24 +67,27 @@ export default function DashboardPage() {
       if (!adminFlag && !execFlag) return
 
       const todayKey = new Date().toDateString()
-      const todayMissionsCount = execFlag
-        ? 0
+      const todayMissionsList = execFlag
+        ? []
         : currentMissions.filter(
             (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
-          ).length
+          )
 
       const [apptsRes, tasksRes, expRes] = await Promise.all([
-        supabase.from('executive_appointments').select('start_time, status'),
+        supabase
+          .from('executive_appointments')
+          .select('*')
+          .order('start_time', { ascending: true }),
         supabase.from('action_items').select('priority, status, due_date'),
         supabase.from('expense_logs').select('amount, reimbursement_status'),
       ])
 
-      const todayApptsCount = (apptsRes.data || []).filter(
-        (a: any) =>
-          new Date(a.start_time).toDateString() === todayKey && a.status !== 'COMPLETATO'
-      ).length
+      const todayApptsList = ((apptsRes.data as ExecutiveAppointment[]) || []).filter(
+        (a) => new Date(a.start_time).toDateString() === todayKey && a.status !== 'COMPLETATO'
+      )
 
-      setTodayEventsCount(todayMissionsCount + todayApptsCount)
+      setTodayAppointments(todayApptsList)
+      setTodayEventsCount(todayMissionsList.length + todayApptsList.length)
 
       const urgentCount = (tasksRes.data || []).filter((t: any) => {
         if (t.status === 'COMPLETATO') return false
@@ -118,7 +127,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const loadDashboard = async () => {
-      const { data: { user: currentUser }, error } = await supabase.auth.getUser()
+      const {
+        data: { user: currentUser },
+        error,
+      } = await supabase.auth.getUser()
 
       if (error || !currentUser) {
         router.replace('/login')
@@ -187,13 +199,26 @@ export default function DashboardPage() {
     return () => clearTimeout(timer)
   }, [globalSosConfirm])
 
-  const handleControlRoomSync = useCallback(() => {
+  const handleControlRoomSync = useCallback(async () => {
     const norm = role.toLowerCase()
     const adminFlag = norm === 'admin'
     const execFlag = norm === 'executive'
-    if (adminFlag) refreshAuditLogs()
-    refreshKpiSummary(adminFlag, execFlag, missions)
-  }, [role, missions, refreshAuditLogs, refreshKpiSummary])
+
+    let latestMissions = missions
+    if (adminFlag) {
+      refreshAuditLogs()
+      const { data: missionsData } = await supabase
+        .from('missions')
+        .select('*')
+        .order('start_time', { ascending: true })
+      if (missionsData) {
+        latestMissions = missionsData as Mission[]
+        setMissions(latestMissions)
+      }
+    }
+
+    refreshKpiSummary(adminFlag, execFlag, latestMissions)
+  }, [role, missions, supabase, refreshAuditLogs, refreshKpiSummary])
 
   const handleArchiveSosBanner = async (sosLog: any) => {
     const sosKey = String(sosLog.id || sosLog.created_at)
@@ -251,7 +276,9 @@ export default function DashboardPage() {
       ])
 
       if (logErr) {
-        setGlobalSosError('Errore trasmissione SOS al server. Contatta immediatamente il Comando via radio o telefono.')
+        setGlobalSosError(
+          'Errore trasmissione SOS al server. Contatta immediatamente il Comando via radio o telefono.'
+        )
         setSendingGlobalSos(false)
         return
       }
@@ -334,6 +361,27 @@ export default function DashboardPage() {
     ? extractGpsCoords(String(activeSosBanner.action || ''))
     : null
 
+  // Elenco unificato cronologico degli eventi odierni per la vista rapida
+  const todayKey = new Date().toDateString()
+  const todayActiveMissions = isExecutive
+    ? []
+    : missions.filter(
+        (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+      )
+
+  const formatTimeHour = (iso: string) =>
+    new Date(iso).toLocaleTimeString('it-IT', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+  const todayFormattedDate = new Date().toLocaleDateString('it-IT', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -350,15 +398,15 @@ export default function DashboardPage() {
                     : ''}
                 </span>
               </div>
-              <div className="text-xs font-semibold text-white">
-                {activeSosBanner.action}
-              </div>
+              <div className="text-xs font-semibold text-white">{activeSosBanner.action}</div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
               {activeSosCoords && (
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeSosCoords)}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    activeSosCoords
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-white hover:bg-neutral-200 text-red-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
@@ -452,7 +500,9 @@ export default function DashboardPage() {
                 </span>
                 {globalSosSent.coords && (
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(globalSosSent.coords)}`}
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      globalSosSent.coords
+                    )}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline decoration-red-400 hover:text-white font-semibold"
@@ -472,10 +522,13 @@ export default function DashboardPage() {
           )}
 
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            <p><span className="text-neutral-500">UID:</span> {user.id}</p>
+            <p>
+              <span className="text-neutral-500">UID:</span> {user.id}
+            </p>
             <p>
               <span className="text-neutral-500">Utente:</span>{' '}
-              {callsign ? `[${callsign}] ` : ''}{user.email}
+              {callsign ? `[${callsign}] ` : ''}
+              {user.email}
             </p>
             <p>
               <span className="text-neutral-500">Profilo:</span>{' '}
@@ -492,21 +545,49 @@ export default function DashboardPage() {
         </div>
 
         {canAccessExecutivePanels && (
-          <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 text-xs`}>
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 ${
+              isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+            } gap-3 text-xs`}
+          >
+            <button
+              type="button"
+              onClick={() => setShowTodayFocus(!showTodayFocus)}
+              className={
+                'rounded-lg p-4 flex items-center justify-between text-left border transition ' +
+                (showTodayFocus
+                  ? 'bg-amber-950/40 border-amber-400 shadow-lg shadow-amber-950/30'
+                  : 'bg-neutral-900 border-amber-700/60 hover:border-amber-400 hover:bg-neutral-900/80')
+              }
+            >
               <div>
-                <div className="text-[10px] uppercase text-neutral-500 font-bold">Agenda Oggi</div>
-                <div className="text-neutral-300 mt-0.5">Eventi &amp; Movimenti</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase text-amber-300 font-bold">
+                    Agenda Oggi
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-400 text-neutral-950 text-[9px] font-bold uppercase">
+                    {showTodayFocus ? 'Chiudi' : 'Apri'}
+                  </span>
+                </div>
+                <div className="text-neutral-300 mt-1">
+                  {isExecutive ? 'Incontri del Giorno' : 'Eventi & Movimenti'}
+                </div>
               </div>
-              <div className="text-xl font-bold text-amber-300">{todayEventsCount}</div>
-            </div>
+              <div className="text-2xl font-bold text-amber-300">{todayEventsCount}</div>
+            </button>
 
             <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
               <div>
-                <div className="text-[10px] uppercase text-neutral-500 font-bold">Priorita &amp; Scadenze</div>
+                <div className="text-[10px] uppercase text-neutral-500 font-bold">
+                  Priorita &amp; Scadenze
+                </div>
                 <div className="text-neutral-300 mt-0.5">Deleghe Alta / Scadute</div>
               </div>
-              <div className={`text-xl font-bold ${urgentTasksCount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <div
+                className={`text-xl font-bold ${
+                  urgentTasksCount > 0 ? 'text-red-400' : 'text-emerald-400'
+                }`}
+              >
                 {urgentTasksCount}
               </div>
             </div>
@@ -533,13 +614,162 @@ export default function DashboardPage() {
                 }
               >
                 <div>
-                  <div className="text-[10px] uppercase text-neutral-500 font-bold">Clearance Team</div>
+                  <div className="text-[10px] uppercase text-neutral-500 font-bold">
+                    Clearance Team
+                  </div>
                   <div className="text-neutral-300 mt-0.5">Richieste in Sospeso</div>
                 </div>
-                <div className={`text-xl font-bold ${pendingUsersCount > 0 ? 'text-amber-300 animate-pulse' : 'text-neutral-400'}`}>
+                <div
+                  className={`text-xl font-bold ${
+                    pendingUsersCount > 0 ? 'text-amber-300 animate-pulse' : 'text-neutral-400'
+                  }`}
+                >
                   {pendingUsersCount}
                 </div>
               </button>
+            )}
+          </div>
+        )}
+
+        {canAccessExecutivePanels && showTodayFocus && (
+          <div className="bg-neutral-900 border-2 border-amber-500/80 rounded-lg p-6 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-amber-400 text-neutral-950 text-[10px] font-bold uppercase">
+                    VISTA RAPIDA OGGI
+                  </span>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
+                    Programma Odierno — {todayFormattedDate}
+                  </h2>
+                </div>
+                <p className="text-xs text-neutral-400 mt-1">
+                  Riepilogo dedicato esclusivamente agli impegni attivi della giornata odierna
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTodayFocus(false)}
+                className="self-start sm:self-center bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700 text-xs uppercase px-3 py-1.5 rounded transition font-semibold"
+              >
+                Chiudi Vista Oggi
+              </button>
+            </div>
+
+            {todayAppointments.length === 0 && todayActiveMissions.length === 0 ? (
+              <div className="py-6 text-center text-xs text-neutral-400 border border-dashed border-neutral-800 rounded-lg">
+                Nessun appuntamento o evento attivo pianificato per oggi.
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                {todayAppointments.map((appt) => {
+                  const isPhysical =
+                    appt.location_details &&
+                    appt.location_type !== 'Video / Call Riservata' &&
+                    !appt.location_details.toLowerCase().startsWith('http')
+
+                  return (
+                    <div
+                      key={appt.id}
+                      className="bg-neutral-950 border border-amber-800/70 rounded-lg p-4 space-y-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-amber-400 text-neutral-950 font-bold text-[11px]">
+                          {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-700 text-[10px] font-bold uppercase">
+                          {appt.status}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-neutral-300 uppercase">
+                          {appt.location_type}
+                        </span>
+                        <span className="text-sm font-bold text-neutral-100">{appt.title}</span>
+                      </div>
+
+                      {appt.location_details && (
+                        <div className="flex flex-wrap items-center gap-2 text-neutral-300">
+                          <span className="text-neutral-500">Sede / Luogo:</span>
+                          <span>{appt.location_details}</span>
+                          {isPhysical && (
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                appt.location_details
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                            >
+                              Maps &nearr;
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {appt.participants && (
+                        <div className="text-neutral-300">
+                          <span className="text-neutral-500">Partecipanti:</span>{' '}
+                          {appt.participants}
+                        </div>
+                      )}
+
+                      {appt.meeting_agenda && (
+                        <div className="bg-neutral-900/80 border border-neutral-800 rounded p-2.5 text-neutral-200 whitespace-pre-line">
+                          <span className="text-[10px] uppercase text-amber-400 font-bold block mb-0.5">
+                            Dettagli / Ordine del Giorno
+                          </span>
+                          {appt.meeting_agenda}
+                        </div>
+                      )}
+
+                      {appt.prep_notes && (
+                        <div className="text-neutral-400 italic">
+                          Note preparatorie: {appt.prep_notes}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {todayActiveMissions.map((m) => (
+                  <div
+                    key={m.id}
+                    className="bg-neutral-950 border border-emerald-800/70 rounded-lg p-4 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-emerald-400 text-neutral-950 font-bold text-[11px]">
+                        {formatTimeHour(m.start_time)} &rarr; {formatTimeHour(m.end_time)}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-700 text-[10px] font-bold uppercase">
+                        MOVIMENTO • {m.status}
+                      </span>
+                      <span className="text-sm font-bold text-neutral-100 uppercase">
+                        {m.client_vip}
+                      </span>
+                      <span className="text-neutral-400">| Mezzo: {m.assigned_vehicle}</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-neutral-300">
+                      <span className="text-neutral-500">Tratta:</span>
+                      <span>
+                        {m.pickup_point} &rarr; {m.dropoff_point}
+                      </span>
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+                          m.pickup_point
+                        )}&destination=${encodeURIComponent(m.dropoff_point)}&travelmode=driving`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                      >
+                        Rotta Maps &nearr;
+                      </a>
+                    </div>
+
+                    {m.notes && <div className="text-neutral-400 italic">Note: {m.notes}</div>}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -576,7 +806,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {canAccessExecutivePanels && (
+        {isAdmin && (
           <SopChecklists
             userEmail={user.email || ''}
             onAuditUpdated={handleControlRoomSync}
@@ -624,7 +854,9 @@ export default function DashboardPage() {
                       return (
                         <tr key={log.id || idx} className={isSosRow ? 'bg-red-950/35' : ''}>
                           <td className="py-2 pr-4 text-neutral-400">
-                            {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
+                            {log.created_at
+                              ? new Date(log.created_at).toLocaleString('it-IT')
+                              : '-'}
                           </td>
                           <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
                           <td className="py-2 pr-4 text-neutral-300">
@@ -633,7 +865,9 @@ export default function DashboardPage() {
                             </span>
                             {coords && (
                               <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`}
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                  coords
+                                )}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={
