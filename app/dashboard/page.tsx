@@ -361,7 +361,6 @@ export default function DashboardPage() {
     ? extractGpsCoords(String(activeSosBanner.action || ''))
     : null
 
-  // Elenco unificato cronologico degli eventi odierni per la vista rapida
   const todayKey = new Date().toDateString()
   const todayActiveMissions = isExecutive
     ? []
@@ -426,8 +425,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
+        <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-yellow-500/30 pb-4">
             <div>
               <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
                 {isExecutive ? 'Ops Portal • Executive Control Room' : 'Ops Portal • Dashboard'}
@@ -556,8 +555,8 @@ export default function DashboardPage() {
               className={
                 'rounded-lg p-4 flex items-center justify-between text-left border-2 transition ' +
                 (showTodayFocus
-                  ? 'bg-yellow-950/40 border-yellow-400 shadow-lg shadow-yellow-950/30'
-                  : 'bg-neutral-900 border-yellow-400/75 hover:border-yellow-300 hover:bg-neutral-900/80')
+                  ? 'bg-emerald-950/40 border-emerald-400 shadow-lg shadow-emerald-950/30'
+                  : 'bg-neutral-900 border-yellow-500/70 hover:border-emerald-400 hover:bg-neutral-900/80')
               }
             >
               <div>
@@ -565,7 +564,7 @@ export default function DashboardPage() {
                   <span className="text-[10px] uppercase text-yellow-300 font-bold">
                     Agenda Oggi
                   </span>
-                  <span className="px-1.5 py-0.5 rounded bg-yellow-400 text-neutral-950 text-[9px] font-bold uppercase">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-400 text-neutral-950 text-[9px] font-bold uppercase">
                     {showTodayFocus ? 'Chiudi' : 'Apri'}
                   </span>
                 </div>
@@ -573,12 +572,12 @@ export default function DashboardPage() {
                   {isExecutive ? 'Incontri del Giorno' : 'Eventi & Movimenti'}
                 </div>
               </div>
-              <div className="text-2xl font-bold text-yellow-300">{todayEventsCount}</div>
+              <div className="text-2xl font-bold text-emerald-300">{todayEventsCount}</div>
             </button>
 
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+            <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-4 flex items-center justify-between">
               <div>
-                <div className="text-[10px] uppercase text-neutral-500 font-bold">
+                <div className="text-[10px] uppercase text-yellow-300 font-bold">
                   Priorita &amp; Scadenze
                 </div>
                 <div className="text-neutral-300 mt-0.5">Deleghe Alta / Scadute</div>
@@ -592,9 +591,9 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex items-center justify-between">
+            <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-4 flex items-center justify-between">
               <div>
-                <div className="text-[10px] uppercase text-neutral-500 font-bold">Nota Spese</div>
+                <div className="text-[10px] uppercase text-yellow-300 font-bold">Nota Spese</div>
                 <div className="text-neutral-300 mt-0.5">Da Rendicontare</div>
               </div>
               <div className="text-lg font-bold text-sky-300">
@@ -607,14 +606,14 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => router.push('/team')}
                 className={
-                  'bg-neutral-900 border rounded-lg p-4 flex items-center justify-between text-left transition ' +
+                  'bg-neutral-900 border-2 rounded-lg p-4 flex items-center justify-between text-left transition ' +
                   (pendingUsersCount > 0
-                    ? 'border-yellow-500/80 hover:bg-yellow-950/20'
-                    : 'border-neutral-800 hover:border-neutral-700')
+                    ? 'border-yellow-400 hover:bg-yellow-950/20'
+                    : 'border-yellow-500/70 hover:border-yellow-400')
                 }
               >
                 <div>
-                  <div className="text-[10px] uppercase text-neutral-500 font-bold">
+                  <div className="text-[10px] uppercase text-yellow-300 font-bold">
                     Clearance Team
                   </div>
                   <div className="text-neutral-300 mt-0.5">Richieste in Sospeso</div>
@@ -632,7 +631,7 @@ export default function DashboardPage() {
         )}
 
         {canAccessExecutivePanels && showTodayFocus && (
-          <div className="bg-neutral-900 border-2 border-yellow-400 rounded-lg p-6 shadow-2xl space-y-4">
+          <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-2xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-yellow-500/30 pb-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -672,13 +671,13 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={appt.id}
-                      className="bg-neutral-950 border border-yellow-400/80 border-l-4 border-l-yellow-400 rounded-lg p-4 space-y-2 shadow-md"
+                      className="bg-neutral-950 border-2 border-emerald-500/80 border-l-4 border-l-emerald-400 rounded-lg p-4 space-y-2 shadow-md"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded bg-yellow-400 text-neutral-950 font-bold text-[11px]">
+                        <span className="px-2.5 py-0.5 rounded bg-emerald-400 text-neutral-950 font-bold text-[11px]">
                           {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-yellow-950/80 text-yellow-300 border border-yellow-500 text-[10px] font-bold uppercase">
+                        <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500 text-[10px] font-bold uppercase">
                           {appt.status}
                         </span>
                         <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-200 uppercase">
@@ -698,7 +697,7 @@ export default function DashboardPage() {
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-yellow-300 border border-yellow-500/60 transition"
+                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-500/60 transition"
                             >
                               Maps &nearr;
                             </a>
@@ -714,8 +713,8 @@ export default function DashboardPage() {
                       )}
 
                       {appt.meeting_agenda && (
-                        <div className="bg-neutral-900/80 border border-yellow-500/30 rounded p-2.5 text-neutral-200 whitespace-pre-line">
-                          <span className="text-[10px] uppercase text-yellow-300 font-bold block mb-0.5">
+                        <div className="bg-neutral-900/80 border border-emerald-500/30 rounded p-2.5 text-neutral-200 whitespace-pre-line">
+                          <span className="text-[10px] uppercase text-emerald-300 font-bold block mb-0.5">
                             Dettagli / Ordine del Giorno
                           </span>
                           {appt.meeting_agenda}
@@ -734,13 +733,13 @@ export default function DashboardPage() {
                 {todayActiveMissions.map((m) => (
                   <div
                     key={m.id}
-                    className="bg-neutral-950 border border-emerald-500/80 border-l-4 border-l-emerald-400 rounded-lg p-4 space-y-2 shadow-md"
+                    className="bg-neutral-950 border-2 border-sky-500/80 border-l-4 border-l-sky-400 rounded-lg p-4 space-y-2 shadow-md"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded bg-emerald-400 text-neutral-950 font-bold text-[11px]">
+                      <span className="px-2.5 py-0.5 rounded bg-sky-400 text-neutral-950 font-bold text-[11px]">
                         {formatTimeHour(m.start_time)} &rarr; {formatTimeHour(m.end_time)}
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-700 text-[10px] font-bold uppercase">
+                      <span className="px-2 py-0.5 rounded bg-sky-950/70 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase">
                         MOVIMENTO • {m.status}
                       </span>
                       <span className="text-sm font-bold text-neutral-100 uppercase">
@@ -760,7 +759,7 @@ export default function DashboardPage() {
                         )}&destination=${encodeURIComponent(m.dropoff_point)}&travelmode=driving`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-sky-700/70 transition"
                       >
                         Rotta Maps &nearr;
                       </a>
@@ -821,7 +820,7 @@ export default function DashboardPage() {
         )}
 
         {isAdmin && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
+          <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl">
             <div className="flex items-center justify-between gap-2 mb-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-200">
                 Audit Log • Ultimi Accessi e Azioni
