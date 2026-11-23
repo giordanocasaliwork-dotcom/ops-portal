@@ -53,6 +53,10 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -269,7 +273,7 @@ function MissionRiskPanel({
 
       {isAnalyzingAi && (
         <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded animate-pulse">
-          Valutazione tattica in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B...
+          Valutazione tattica in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B (con retry/fallback automatico)...
         </div>
       )}
 
@@ -1294,7 +1298,10 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
         throw new Error('Nessun modello Gemini compatibile trovato per questa chiave API.')
       }
 
-      const callModel = async (modelName: string, useSearchTool: boolean) => {
+      const isTransientStatus = (status: number) =>
+        status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+
+      const callModelOnce = async (modelName: string, useSearchTool: boolean) => {
         const payload: Record<string, unknown> = {
           contents: [
             {
@@ -1326,13 +1333,31 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
         return { ok: res.ok, status: res.status, text }
       }
 
+      const callModelWithRetry = async (
+        modelName: string,
+        useSearchTool: boolean,
+        maxRetries = 1
+      ) => {
+        let attempt = await callModelOnce(modelName, useSearchTool)
+        let retryCount = 0
+
+        while (!attempt.ok && isTransientStatus(attempt.status) && retryCount < maxRetries) {
+          retryCount += 1
+          await sleep(1800 * retryCount)
+          attempt = await callModelOnce(modelName, useSearchTool)
+        }
+
+        return attempt
+      }
+
       let rawResponseText = ''
       let lastError = ''
       let usedModel = ''
       let ok = false
+      let fatalAuthError = false
 
       for (const modelName of candidates) {
-        const attempt = await callModel(modelName, true)
+        const attempt = await callModelWithRetry(modelName, true, 1)
         rawResponseText = attempt.text
         if (attempt.ok) {
           ok = true
@@ -1340,29 +1365,34 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
           break
         }
         lastError = `Errore Gemini API su ${modelName} (${attempt.status}): ${attempt.text.slice(0, 220)}`
-        if (attempt.status !== 404 && attempt.status !== 400) {
+        if (attempt.status === 401 || attempt.status === 403) {
+          fatalAuthError = true
           break
         }
+        // Continua sul modello successivo per 503, 429, 500, 502, 504, 404, 400
       }
 
-      if (!ok) {
-        for (const modelName of candidates.slice(0, 3)) {
-          const fallbackAttempt = await callModel(modelName, false)
+      if (!ok && !fatalAuthError) {
+        for (const modelName of candidates.slice(0, 4)) {
+          const fallbackAttempt = await callModelWithRetry(modelName, false, 1)
           rawResponseText = fallbackAttempt.text
           if (fallbackAttempt.ok) {
             ok = true
-            usedModel = modelName
+            usedModel = `${modelName} (no-search)`
             break
           }
           lastError = `Errore Gemini API su ${modelName} (${fallbackAttempt.status}): ${fallbackAttempt.text.slice(0, 220)}`
-          if (fallbackAttempt.status !== 404 && fallbackAttempt.status !== 400) {
+          if (fallbackAttempt.status === 401 || fallbackAttempt.status === 403) {
             break
           }
         }
       }
 
       if (!ok) {
-        throw new Error(lastError || 'Errore nella chiamata a Gemini API.')
+        throw new Error(
+          lastError ||
+            'Tutti i modelli Gemini disponibili risultano momentaneamente occupati (503/429). Riprova tra 30 secondi.'
+        )
       }
 
       const geminiJson = JSON.parse(rawResponseText)
