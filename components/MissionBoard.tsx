@@ -60,6 +60,7 @@ interface MissionRiskPanelProps {
   userEmail: string
   userId: string
   onRunAiAnalysis: () => void
+  onPrintMission: () => void
   onRiskSaved: (missionId: string, updated: RiskAssessment) => void
   onAuditUpdated?: () => void
 }
@@ -80,6 +81,7 @@ function MissionRiskPanel({
   userEmail,
   userId,
   onRunAiAnalysis,
+  onPrintMission,
   onRiskSaved,
   onAuditUpdated,
 }: MissionRiskPanelProps) {
@@ -110,11 +112,11 @@ function MissionRiskPanel({
   }, [risk])
 
   const buildMapsSearchUrl = (query: string) => {
-    return `[https://www.google.com/maps/search/?api=1&query=$](https://www.google.com/maps/search/?api=1&query=$){encodeURIComponent(query.trim())}`
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
   }
 
   const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `[https://www.google.com/maps/dir/?api=1&origin=$](https://www.google.com/maps/dir/?api=1&origin=$){encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
   }
 
   const parseLines = (raw: string | null | undefined): string[] => {
@@ -189,11 +191,11 @@ function MissionRiskPanel({
       `Rotta Maps: ${buildMapsRouteUrl(pickupPoint, dropoffPoint)}`,
       `Assetto: ${assignedVehicle} | Op: ${operatorLabel}`,
       `Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
-      risk?.choke_points ? `Choke Points & Situazione:\n${risk.choke_points}` : null,
-      risk?.safe_havens ? `Safe Havens:\n${risk.safe_havens}` : null,
-      risk?.medical_facilities ? `Strutture Sanitarie / DEA:\n${risk.medical_facilities}` : null,
-      risk?.evacuation_route ? `Piano B / Esfiltrazione:\n${risk.evacuation_route}` : null,
-      risk?.emergency_contacts ? `Contatti Emergenza: ${risk.emergency_contacts}` : null,
+      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE:\n${risk.choke_points}` : null,
+      risk?.safe_havens ? `\nSAFE HAVENS (FFOO):\n${risk.safe_havens}` : null,
+      risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
+      risk?.evacuation_route ? `\nPIANO B / ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
+      risk?.emergency_contacts ? `\nContatti Emergenza: ${risk.emergency_contacts}` : null,
       notes ? `Note Logistica: ${notes}` : null,
     ].filter(Boolean)
 
@@ -230,6 +232,13 @@ function MissionRiskPanel({
                 : 'Genera Analisi AI Real-Time'}
             </button>
           )}
+          <button
+            type="button"
+            onClick={onPrintMission}
+            className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-[11px] uppercase px-3 py-1 rounded transition"
+          >
+            PDF / Stampa
+          </button>
           <button
             type="button"
             onClick={handleCopyBriefing}
@@ -568,6 +577,10 @@ function ExecutiveBriefPanel({
       brief?.hospitality_details ? `Ospitalita / Hotel: ${brief.hospitality_details}` : null,
       brief?.confidential_notes ? `Note Riservate: ${brief.confidential_notes}` : null,
       risk?.threat_level ? `Livello Rischio Area: ${risk.threat_level}` : null,
+      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE:\n${risk.choke_points}` : null,
+      risk?.safe_havens ? `\nSAFE HAVENS (FFOO):\n${risk.safe_havens}` : null,
+      risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
+      risk?.evacuation_route ? `\nPIANO B / ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
     ].filter(Boolean)
 
     try {
@@ -859,6 +872,7 @@ export default function MissionBoard({
   const [showFleet, setShowFleet] = useState(false)
   const [showMorningBrief, setShowMorningBrief] = useState(false)
   const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
+  const [copiedMissionId, setCopiedMissionId] = useState<string | null>(null)
   const [sendingTelegramBrief, setSendingTelegramBrief] = useState(false)
   const [telegramBriefStatus, setTelegramBriefStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -892,12 +906,20 @@ export default function MissionBoard({
   const [vehCategory, setVehCategory] = useState('Executive')
 
   const buildMapsSearchUrl = (query: string) => {
-    return `[https://www.google.com/maps/search/?api=1&query=$](https://www.google.com/maps/search/?api=1&query=$){encodeURIComponent(query.trim())}`
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
   }
 
   const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `[https://www.google.com/maps/dir/?api=1&origin=$](https://www.google.com/maps/dir/?api=1&origin=$){encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
   }
+
+  const escapeHtml = (str: string) =>
+    str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/\n/g, '<br/>')
 
   const formatIcsDate = (isoString: string) => {
     return new Date(isoString).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
@@ -908,10 +930,14 @@ export default function MissionBoard({
   }
 
   const handleDownloadMissionIcs = (mission: Mission) => {
+    const risk = riskList.find((r) => r.mission_id === mission.id)
     const descParts = [
       `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
       `Assetto: ${mission.assigned_vehicle}`,
       `Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
+      risk?.threat_level ? `Livello Rischio: ${risk.threat_level}` : null,
+      risk?.safe_havens ? `Safe Havens:\n${risk.safe_havens}` : null,
+      risk?.evacuation_route ? `Piano B:\n${risk.evacuation_route}` : null,
       mission.notes ? `Note: ${mission.notes}` : null,
     ].filter(Boolean)
 
@@ -926,7 +952,7 @@ export default function MissionBoard({
       `DTEND:${formatIcsDate(mission.end_time)}`,
       `SUMMARY:${escapeIcsText(`Movimento: ${mission.client_vip}`)}`,
       `LOCATION:${escapeIcsText(`${mission.pickup_point} -> ${mission.dropoff_point}`)}`,
-      `DESCRIPTION:${escapeIcsText(descParts.join('\n'))}`,
+      `DESCRIPTION:${escapeIcsText(descParts.join('\n\n'))}`,
       'END:VEVENT',
       'END:VCALENDAR',
     ]
@@ -940,6 +966,147 @@ export default function MissionBoard({
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  }
+
+  const buildMissionFullText = (mission: Mission) => {
+    const risk = riskList.find((r) => r.mission_id === mission.id)
+    const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
+
+    const lines = [
+      `SCHEDA MISSIONE & ANALISI TATTICA - ${mission.client_vip.toUpperCase()}`,
+      `Stato: ${mission.status.toUpperCase()} | Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
+      `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
+      `Tratta Principale (Percorso A): ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Rotta Maps: ${buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}`,
+      `Assetto: ${mission.assigned_vehicle} | Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
+      mission.notes ? `Note Logistica: ${mission.notes}` : null,
+      brief?.counterpart_name
+        ? `\nDOSSIER DIREZIONALE:\nInterlocutore: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
+        : null,
+      brief?.meeting_objective ? `Obiettivo: ${brief.meeting_objective}` : null,
+      brief?.travel_booking_ref ? `Travel / PNR: ${brief.travel_booking_ref}` : null,
+      brief?.hospitality_details ? `Ospitalita / Hotel: ${brief.hospitality_details}` : null,
+      brief?.talking_points ? `Talking Points:\n${brief.talking_points}` : null,
+      brief?.confidential_notes ? `Note Riservate: ${brief.confidential_notes}` : null,
+      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE PARTENZA / ARRIVO:\n${risk.choke_points}` : null,
+      risk?.safe_havens ? `\nSAFE HAVENS & PRESIDI FFOO:\n${risk.safe_havens}` : null,
+      risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
+      risk?.evacuation_route ? `\nPIANO B — ITINERARIO ALTERNATIVO & ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
+      risk?.emergency_contacts ? `\nContatti Emergenza: ${risk.emergency_contacts}` : null,
+    ].filter(Boolean)
+
+    return lines.join('\n')
+  }
+
+  const handleCopyFullMissionText = async (mission: Mission) => {
+    try {
+      await navigator.clipboard.writeText(buildMissionFullText(mission))
+      setCopiedMissionId(mission.id)
+      setTimeout(() => setCopiedMissionId(null), 2000)
+    } catch {
+      setError('Impossibile copiare la scheda completa negli appunti.')
+    }
+  }
+
+  const handlePrintMission = (mission: Mission) => {
+    const printWin = window.open('', '_blank', 'width=900,height=950')
+    if (!printWin) {
+      setError('Abilita i pop-up del browser per generare il PDF/stampa della missione.')
+      return
+    }
+
+    const risk = riskList.find((r) => r.mission_id === mission.id)
+    const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
+
+    const execHtml =
+      isAdmin && brief
+        ? `
+        <div class="section">
+          <div class="section-title">Dossier Direzionale &amp; Travel Management</div>
+          <div class="box">
+            ${brief.counterpart_name ? `<div><strong>Interlocutore:</strong> ${escapeHtml(brief.counterpart_name)}${brief.counterpart_role ? ' (' + escapeHtml(brief.counterpart_role) + ')' : ''}</div>` : ''}
+            ${brief.meeting_objective ? `<div><strong>Obiettivo Incontro:</strong> ${escapeHtml(brief.meeting_objective)}</div>` : ''}
+            ${brief.travel_booking_ref ? `<div><strong>Travel / PNR:</strong> ${escapeHtml(brief.travel_booking_ref)}</div>` : ''}
+            ${brief.hospitality_details ? `<div><strong>Ospitalita / Hotel:</strong> ${escapeHtml(brief.hospitality_details)}</div>` : ''}
+            ${brief.talking_points ? `<div style="margin-top:6px;"><strong>Talking Points:</strong><br/>${escapeHtml(brief.talking_points)}</div>` : ''}
+            ${brief.confidential_notes ? `<div style="margin-top:6px;"><strong>Note Riservate:</strong> ${escapeHtml(brief.confidential_notes)}</div>` : ''}
+          </div>
+        </div>`
+        : ''
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+        <meta charset="utf-8" />
+        <title>Briefing Missione - ${escapeHtml(mission.client_vip)}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 36px; line-height: 1.5; font-size: 13px; }
+          .header { border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+          .tag { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #444; }
+          h1 { font-size: 20px; margin: 4px 0 0 0; text-transform: uppercase; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f6f6f6; border: 1px solid #d4d4d8; padding: 14px; border-radius: 6px; margin-bottom: 20px; }
+          .section { margin-bottom: 18px; page-break-inside: avoid; }
+          .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #111; border-bottom: 1px solid #d4d4d8; padding-bottom: 4px; margin-bottom: 8px; }
+          .box { padding: 10px 12px; border-left: 3px solid #111; background: #fafafa; }
+          .box-planb { padding: 10px 12px; border-left: 3px solid #047857; background: #f0fdf4; }
+          .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+          .footer { margin-top: 28px; font-size: 11px; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="tag">SCHEDA OPERATIVA &amp; TRAVEL RISK ASSESSMENT</div>
+            <h1>${escapeHtml(mission.client_vip)}</h1>
+          </div>
+          <div style="text-align:right;">
+            <div class="tag">STATO: ${escapeHtml(mission.status.toUpperCase())}</div>
+            <div class="tag">RISCHIO: ${escapeHtml(risk?.threat_level || 'NON VALUTATO')}</div>
+          </div>
+        </div>
+
+        <div class="meta-grid">
+          <div><strong>Finestra Oraria:</strong><br/>${escapeHtml(formatDateTime(mission.start_time))} &rarr; ${escapeHtml(formatDateTime(mission.end_time))}</div>
+          <div><strong>Assetto &amp; Operatore:</strong><br/>${escapeHtml(mission.assigned_vehicle)} | ${escapeHtml(formatOperatorLabel(mission.assigned_operator_id))}</div>
+          <div style="grid-column: span 2;"><strong>Itinerario Principale (Percorso A):</strong><br/>${escapeHtml(mission.pickup_point)} &rarr; ${escapeHtml(mission.dropoff_point)}</div>
+          ${mission.notes ? `<div style="grid-column: span 2;"><strong>Note Logistica:</strong> ${escapeHtml(mission.notes)}</div>` : ''}
+        </div>
+
+        ${execHtml}
+
+        <div class="section">
+          <div class="section-title">Choke Points &amp; Situazione Partenza / Arrivo (Percorso A)</div>
+          <div class="box">${risk?.choke_points ? escapeHtml(risk.choke_points) : 'Nessuna analisi Choke Points registrata.'}</div>
+        </div>
+
+        <div class="two-col">
+          <div class="section">
+            <div class="section-title">Safe Havens &amp; Presidi FFOO Strategici</div>
+            <div class="box">${risk?.safe_havens ? escapeHtml(risk.safe_havens) : 'Nessun Safe Haven censito.'}</div>
+          </div>
+          <div class="section">
+            <div class="section-title">Strutture Sanitarie / DEA Lungo Tratta</div>
+            <div class="box">${risk?.medical_facilities ? escapeHtml(risk.medical_facilities) : 'Nessuna struttura sanitaria censita.'}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Piano B — Itinerario Alternativo &amp; Esfiltrazione</div>
+          <div class="box-planb">${risk?.evacuation_route ? escapeHtml(risk.evacuation_route) : 'Nessun Piano B inserito.'}</div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Contatti Emergenza &amp; Sala Operativa</div>
+          <div class="box">${risk?.emergency_contacts ? escapeHtml(risk.emergency_contacts) : 'NUE 112 - CCISS 1518'}</div>
+        </div>
+
+        <div class="footer">Documento generato da Ops Portal il ${new Date().toLocaleString('it-IT')}</div>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    printWin.document.close()
   }
 
   const loadAssets = useCallback(async () => {
@@ -1013,39 +1180,132 @@ export default function MissionBoard({
     setError(null)
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const { data: rpcKey, error: rpcErr } = await supabase.rpc('get_gemini_api_key')
+      const apiKey = String(rpcKey || '').trim()
 
-      if (!session?.access_token) {
-        throw new Error('Sessione non valida. Effettua nuovamente il login.')
+      if (rpcErr || !apiKey || apiKey.startsWith('INCOLLA_QUI')) {
+        throw new Error(
+          'Chiave GEMINI_API_KEY non configurata in Supabase (tabella app_secrets). Inserisci la tua API key di Google AI Studio e riprova.'
+        )
       }
 
-      const response = await fetch('/api/analyze-route', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+      const startFormatted = mission.start_time
+        ? new Date(mission.start_time).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })
+        : 'Non specificato'
+      const endFormatted = mission.end_time
+        ? new Date(mission.end_time).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })
+        : 'Non specificato'
+
+      const prompt = `Sei un analista senior di Travel Risk Management, Executive Protection e Sicurezza Operativa.
+Esegui una valutazione tattica in tempo reale (verificando tramite ricerca web eventuali allerte meteo, traffico straordinario, cantieri critici, incidenti, scioperi o criticita di ordine pubblico odierne) per la seguente movimentazione:
+
+- Soggetto / Missione: ${mission.client_vip}
+- Punto di Partenza (Pick-up): ${mission.pickup_point}
+- Punto di Arrivo (Drop-off): ${mission.dropoff_point}
+- Finestra Oraria: ${startFormatted} -> ${endFormatted}
+- Assetto / Mezzo: ${mission.assigned_vehicle || 'Non specificato'}
+- Note Operative: ${mission.notes || 'Nessuna'}
+
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, nessun blocco markdown) con questa esatta struttura:
+{
+  "threat_level": "LOW" | "MODERATE" | "HIGH" | "CRITICAL",
+  "choke_points": "Testo strutturato in 3 sotto-blocchi chiari:\n1) SITUAZIONE PARTENZA (${mission.pickup_point}): analisi viabilita, ZTL, accessi e criticita attuali.\n2) CHOKE POINTS ITINERARIO PRINCIPALE (PERCORSO A): elenco dettagliato dei nodi critici, svincoli, valichi/gallerie, barriere autostradali e punti di rallentamento lungo la tratta.\n3) SITUAZIONE ARRIVO (${mission.dropoff_point}): analisi contesto locale, viabilita in avvicinamento e criticita.",
+  "safe_havens": "Elenco di 4-6 presidi strategici reali (Stazioni Carabinieri, Sottosezioni Polizia Stradale, Commissariati, aree sicure presidiate) posizionati presso partenza, snodi intermedi lungo l'itinerario e arrivo. IMPORTANTE: scrivi UN SOLO PRESIDIO PER RIGA con indirizzo/localita precisa (es. Sottosezione Polizia Stradale Firenze Nord - A1), senza elenchi puntati o numeri all'inizio della riga, cosi ogni riga generera un link diretto a Google Maps.",
+  "medical_facilities": "Elenco di 3-5 strutture ospedaliere reali con Pronto Soccorso / DEA di I o II livello lungo il corridoio e in prossimita di partenza e arrivo. IMPORTANTE: scrivi UNA SOLA STRUTTURA PER RIGA con citta/indirizzo (es. Ospedale Maggiore Carlo Alberto Pizzardi Bologna), senza elenchi puntati o numeri.",
+  "evacuation_route": "PIANO B (ITINERARIO ALTERNATIVO & ESFILTRAZIONE): descrivi una rotta alternativa completa e concreta (es. direttrice autostradale secondaria, superstrada E45/A15/statali principali) indicando esattamente a quale svincolo deviare in caso di blocco o emergenza sul Percorso A, piu le vie di esfiltrazione rapida dall'area di destinazione.",
+  "emergency_contacts": "Numeri e riferimenti operativi pertinenti alla tratta (NUE 112, CCISS Viaggiare Informati 1518, Polizia Stradale compartimenti interessati, Centrale Operativa)."
+}`
+
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+          apiKey
+        )}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }],
+              },
+            ],
+            tools: [{ google_search: {} }],
+            generationConfig: {
+              temperature: 0.2,
+            },
+          }),
+        }
+      )
+
+      const rawResponseText = await geminiResponse.text()
+      if (!geminiResponse.ok) {
+        throw new Error(`Errore Gemini API (${geminiResponse.status}): ${rawResponseText.slice(0, 220)}`)
+      }
+
+      const geminiJson = JSON.parse(rawResponseText)
+      const rawText: string =
+        geminiJson?.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p.text || '')
+          .join('\n') || ''
+
+      if (!rawText.trim()) {
+        throw new Error('Risposta vuota ricevuta dal motore AI.')
+      }
+
+      const cleanedJsonStr = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim()
+
+      const firstBrace = cleanedJsonStr.indexOf('{')
+      const lastBrace = cleanedJsonStr.lastIndexOf('}')
+      if (firstBrace === -1 || lastBrace === -1) {
+        throw new Error('Formato analisi AI non valido. Riprova.')
+      }
+
+      const parsed = JSON.parse(cleanedJsonStr.slice(firstBrace, lastBrace + 1))
+
+      const allowedLevels: ThreatLevel[] = ['LOW', 'MODERATE', 'HIGH', 'CRITICAL']
+      const rawLevel = String(parsed.threat_level || 'MODERATE').toUpperCase() as ThreatLevel
+      const threatLevel: ThreatLevel = allowedLevels.includes(rawLevel) ? rawLevel : 'MODERATE'
+
+      const assessmentPayload = {
+        mission_id: mission.id,
+        threat_level: threatLevel,
+        choke_points: String(parsed.choke_points || '').trim() || null,
+        safe_havens: String(parsed.safe_havens || '').trim() || null,
+        medical_facilities: String(parsed.medical_facilities || '').trim() || null,
+        evacuation_route: String(parsed.evacuation_route || '').trim() || null,
+        emergency_contacts:
+          String(parsed.emergency_contacts || '').trim() || 'NUE 112 - CCISS 1518',
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }
+
+      const { data: savedRow, error: upsertErr } = await supabase
+        .from('mission_risk_assessments')
+        .upsert(assessmentPayload, { onConflict: 'mission_id' })
+        .select()
+        .single()
+
+      if (upsertErr) {
+        throw new Error(`Analisi generata ma errore salvataggio su DB: ${upsertErr.message}`)
+      }
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `AI_ROUTE_RISK_ANALYSIS (${mission.client_vip}: ${mission.pickup_point} -> ${mission.dropoff_point}) -> ${threatLevel}`,
+          status: 'SUCCESS',
         },
-        body: JSON.stringify({
-          mission_id: mission.id,
-          client_vip: mission.client_vip,
-          pickup_point: mission.pickup_point,
-          dropoff_point: mission.dropoff_point,
-          start_time: mission.start_time,
-          end_time: mission.end_time,
-          assigned_vehicle: mission.assigned_vehicle,
-          notes: mission.notes,
-        }),
-      })
+      ])
 
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(result.error || 'Errore durante la valutazione AI del percorso.')
-      }
-
-      if (result.assessment) {
-        handleRiskSaved(mission.id, result.assessment as RiskAssessment)
+      if (savedRow) {
+        handleRiskSaved(mission.id, savedRow as RiskAssessment)
       }
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -1080,7 +1340,7 @@ export default function MissionBoard({
     const lines: string[] = [
       `MORNING BRIEFING DIREZIONE - ${todayStr.toUpperCase()}`,
       headerLabel,
-      '----------------------------------------',
+      '==================================================',
     ]
 
     if (targetMissions.length === 0) {
@@ -1099,7 +1359,7 @@ export default function MissionBoard({
         })
 
         lines.push(`${index + 1}. [${startHour} - ${endHour}] ${m.client_vip.toUpperCase()}`)
-        lines.push(`   Tratta: ${m.pickup_point} -> ${m.dropoff_point}`)
+        lines.push(`   Tratta (Percorso A): ${m.pickup_point} -> ${m.dropoff_point}`)
         lines.push(`   Assetto: ${m.assigned_vehicle} | Op: ${formatOperatorLabel(m.assigned_operator_id)}`)
         if (brief?.counterpart_name) {
           lines.push(
@@ -1118,7 +1378,22 @@ export default function MissionBoard({
         if (risk?.threat_level) {
           lines.push(`   Livello Rischio: ${risk.threat_level}`)
         }
-        lines.push('')
+        if (risk?.choke_points) {
+          lines.push(`   Choke Points & Situazione:\n${risk.choke_points}`)
+        }
+        if (risk?.safe_havens) {
+          lines.push(`   Safe Havens (FFOO):\n${risk.safe_havens}`)
+        }
+        if (risk?.medical_facilities) {
+          lines.push(`   Strutture Sanitarie / DEA:\n${risk.medical_facilities}`)
+        }
+        if (risk?.evacuation_route) {
+          lines.push(`   Piano B / Esfiltrazione:\n${risk.evacuation_route}`)
+        }
+        if (risk?.emergency_contacts) {
+          lines.push(`   Contatti Emergenza: ${risk.emergency_contacts}`)
+        }
+        lines.push('--------------------------------------------------')
       })
     }
 
@@ -1136,32 +1411,92 @@ export default function MissionBoard({
   }
 
   const handlePrintMorningBriefing = () => {
-    const printWin = window.open('', '_blank', 'width=850,height=950')
+    const printWin = window.open('', '_blank', 'width=900,height=950')
     if (!printWin) {
       setError('Abilita i pop-up del browser per generare il PDF/stampa.')
       return
     }
 
-    const escaped = generateMorningBriefingText()
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
+    const todayStr = new Date().toLocaleDateString('it-IT', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+    const todayKey = new Date().toDateString()
+    const todayMissions = missions.filter(
+      (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+    )
+    const targetMissions =
+      todayMissions.length > 0 ? todayMissions : missions.filter((m) => m.status !== 'chiusa')
+
+    const cardsHtml =
+      targetMissions.length === 0
+        ? '<p>Nessuna movimentazione o appuntamento attivo in agenda.</p>'
+        : targetMissions
+            .map((m, idx) => {
+              const risk = riskList.find((r) => r.mission_id === m.id)
+              const brief = briefList.find((b) => b.mission_id === m.id)
+              const startHour = new Date(m.start_time).toLocaleTimeString('it-IT', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+              const endHour = new Date(m.end_time).toLocaleTimeString('it-IT', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+
+              return `
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <span class="badge">${idx + 1}. ${escapeHtml(startHour)} - ${escapeHtml(endHour)}</span>
+                      <strong class="title">${escapeHtml(m.client_vip)}</strong>
+                    </div>
+                    <div class="risk">RISCHIO: ${escapeHtml(risk?.threat_level || 'N/D')}</div>
+                  </div>
+                  <div class="meta">
+                    <div><strong>Tratta (Percorso A):</strong> ${escapeHtml(m.pickup_point)} &rarr; ${escapeHtml(m.dropoff_point)}</div>
+                    <div><strong>Assetto:</strong> ${escapeHtml(m.assigned_vehicle)} | <strong>Operatore:</strong> ${escapeHtml(formatOperatorLabel(m.assigned_operator_id))}</div>
+                    ${brief?.counterpart_name ? `<div><strong>Interlocutore:</strong> ${escapeHtml(brief.counterpart_name)}</div>` : ''}
+                    ${brief?.travel_booking_ref ? `<div><strong>Travel/PNR:</strong> ${escapeHtml(brief.travel_booking_ref)}</div>` : ''}
+                  </div>
+                  ${risk?.choke_points ? `<div class="sub"><strong>Choke Points &amp; Situazione:</strong><br/>${escapeHtml(risk.choke_points)}</div>` : ''}
+                  ${risk?.safe_havens ? `<div class="sub"><strong>Safe Havens (FFOO):</strong><br/>${escapeHtml(risk.safe_havens)}</div>` : ''}
+                  ${risk?.medical_facilities ? `<div class="sub"><strong>Strutture Sanitarie / DEA:</strong><br/>${escapeHtml(risk.medical_facilities)}</div>` : ''}
+                  ${risk?.evacuation_route ? `<div class="sub-planb"><strong>Piano B / Esfiltrazione:</strong><br/>${escapeHtml(risk.evacuation_route)}</div>` : ''}
+                </div>
+              `
+            })
+            .join('')
 
     printWin.document.write(`
       <!DOCTYPE html>
       <html lang="it">
       <head>
         <meta charset="utf-8" />
-        <title>Morning Briefing Direzione</title>
+        <title>Morning Briefing Direzione - ${escapeHtml(todayStr)}</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 40px; }
-          .top { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 20px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; color: #444; }
-          pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; padding: 36px; line-height: 1.45; font-size: 13px; }
+          .top { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 20px; }
+          .tag { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; font-weight: 700; color: #444; }
+          h1 { margin: 4px 0 0 0; font-size: 20px; text-transform: uppercase; }
+          .card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; margin-bottom: 16px; page-break-inside: avoid; }
+          .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 8px; }
+          .badge { background: #111; color: #fff; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 8px; }
+          .title { font-size: 15px; text-transform: uppercase; }
+          .risk { font-size: 11px; font-weight: 700; }
+          .meta { background: #f8fafc; padding: 8px 10px; border-radius: 4px; margin-bottom: 8px; }
+          .sub { margin-top: 8px; padding-left: 10px; border-left: 3px solid #64748b; }
+          .sub-planb { margin-top: 8px; padding: 8px 10px; border-left: 3px solid #047857; background: #f0fdf4; }
         </style>
       </head>
       <body>
-        <div class="top">RISERVATO DIREZIONE • MORNING BRIEFING ESECUTIVO</div>
-        <pre>${escaped}</pre>
+        <div class="top">
+          <div class="tag">RISERVATO DIREZIONE • MORNING BRIEFING ESECUTIVO</div>
+          <h1>${escapeHtml(todayStr)}</h1>
+        </div>
+        ${cardsHtml}
         <script>window.onload = function() { window.print(); };</script>
       </body>
       </html>
@@ -1685,10 +2020,10 @@ export default function MissionBoard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs uppercase tracking-wider text-amber-300 font-bold">
-                Morning Briefing Direzione - Riepilogo Esecutivo
+                Morning Briefing Direzione - Riepilogo Esecutivo Completo
               </div>
               <p className="text-[11px] text-neutral-400">
-                Invio automatico ogni giorno alle 07:30 su Telegram (include appuntamenti, movimentazioni e deleghe)
+                Include appuntamenti, movimentazioni, Choke Points, Safe Havens, Piano B e deleghe urgenti
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1723,7 +2058,7 @@ export default function MissionBoard({
             </div>
           )}
 
-          <pre className="p-3 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-200 whitespace-pre-wrap font-mono overflow-x-auto">
+          <pre className="p-3 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-200 whitespace-pre-wrap font-mono overflow-x-auto max-h-96 overflow-y-auto">
             {generateMorningBriefingText()}
           </pre>
         </div>
@@ -2191,6 +2526,24 @@ export default function MissionBoard({
                       .ICS
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => handleCopyFullMissionText(mission)}
+                      title="Copia scheda missione completa (inclusi Safe Havens, Choke Points e Piano B)"
+                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
+                    >
+                      {copiedMissionId === mission.id ? 'Copiato' : 'Copia Testo'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePrintMission(mission)}
+                      title="Apri scheda stampabile / Salva PDF completa"
+                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
+                    >
+                      PDF / Stampa
+                    </button>
+
                     {isAdmin && (
                       <button
                         type="button"
@@ -2282,9 +2635,16 @@ export default function MissionBoard({
                 )}
 
                 {isRiskExpanded && (
-                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" pickupPoint="{mission.pickup_point}" risk="{risk}" startTime="{mission.start_time}" userEmail="{userEmail}" userId="{userId}"> runAiRouteRiskAnalysis(mission)}
+                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()"> runAiRouteRiskAnalysis(mission)}
+                    onPrintMission={() => handlePrintMission(mission)}
                     onRiskSaved={handleRiskSaved}
                     onAuditUpdated={onAuditUpdated}
+                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
+                    pickupPoint={mission.pickup_point}
+                    risk={risk}
+                    startTime={mission.start_time}
+                    userEmail={userEmail}
+                    userId={userId}
                   />
                 )}
               </div>
