@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
@@ -187,8 +187,8 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
   )
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
+    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-yellow-500/30 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 text-[10px] font-bold uppercase">
