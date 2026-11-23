@@ -132,7 +132,7 @@ function MissionRiskPanel({
     if (!raw) return []
     return raw
       .split('\n')
-      .map((line) => line.trim())
+      .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
       .filter((line) => line.length > 0)
   }
 
@@ -409,7 +409,7 @@ function MissionRiskPanel({
                       rel="noopener noreferrer"
                       className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
                     >
-                      Maps &nearr;
+                      Maps ↗
                     </a>
                   </div>
                 ))}
@@ -434,7 +434,7 @@ function MissionRiskPanel({
                       rel="noopener noreferrer"
                       className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-400 border border-sky-800/70 transition"
                     >
-                      Maps &nearr;
+                      Maps ↗
                     </a>
                   </div>
                 ))}
@@ -1251,33 +1251,118 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
   "emergency_contacts": "Numeri e riferimenti operativi pertinenti alla tratta (NUE 112, CCISS Viaggiare Informati 1518, Polizia Stradale compartimenti interessati, Centrale Operativa)."
 }`
 
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${encodeURIComponent(
-          apiKey
-        )}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: prompt }],
-              },
-            ],
-            tools: [{ google_search: {} }],
-            generationConfig: {
-              temperature: 0.2,
-            },
-          }),
-        }
+      const modelsRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
       )
+      if (!modelsRes.ok) {
+        const errTxt = await modelsRes.text()
+        throw new Error(`Errore lettura modelli Gemini (${modelsRes.status}): ${errTxt.slice(0, 220)}`)
+      }
 
-      const rawResponseText = await geminiResponse.text()
-      if (!geminiResponse.ok) {
-        throw new Error(`Errore Gemini API (${geminiResponse.status}): ${rawResponseText.slice(0, 220)}`)
+      const modelsData = (await modelsRes.json()) as {
+        models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>
+      }
+
+      const availableModels = (modelsData.models || [])
+        .filter(
+          (m) =>
+            typeof m.name === 'string' &&
+            m.name.includes('gemini') &&
+            Array.isArray(m.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent') &&
+            !/embedding|imagen|veo|tts|audio|image|robotics|computer-use|aqa/i.test(m.name) &&
+            !m.name.endsWith('/gemini-2.5-flash')
+        )
+        .map((m) => m.name as string)
+
+      const sortedModels = [...availableModels].sort((a, b) => {
+        const score = (name: string) => {
+          let s = 0
+          if (name.includes('flash')) s += 100
+          if (name.includes('gemini-3')) s += 50
+          else if (name.includes('gemini-2.5')) s += 30
+          if (name.includes('latest')) s += 20
+          if (!name.includes('lite')) s += 10
+          if (!name.includes('exp') && !name.includes('preview')) s += 5
+          return s
+        }
+        return score(b) - score(a) || b.localeCompare(a)
+      })
+
+      const candidates = sortedModels.slice(0, 8)
+      if (candidates.length === 0) {
+        throw new Error('Nessun modello Gemini compatibile trovato per questa chiave API.')
+      }
+
+      const callModel = async (modelName: string, useSearchTool: boolean) => {
+        const payload: Record<string, unknown> = {
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+          },
+        }
+        if (useSearchTool) {
+          payload.tools = [{ google_search: {} }]
+        }
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${encodeURIComponent(
+            apiKey
+          )}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          }
+        )
+        const text = await res.text()
+        return { ok: res.ok, status: res.status, text }
+      }
+
+      let rawResponseText = ''
+      let lastError = ''
+      let usedModel = ''
+      let ok = false
+
+      for (const modelName of candidates) {
+        const attempt = await callModel(modelName, true)
+        rawResponseText = attempt.text
+        if (attempt.ok) {
+          ok = true
+          usedModel = modelName
+          break
+        }
+        lastError = `Errore Gemini API su ${modelName} (${attempt.status}): ${attempt.text.slice(0, 220)}`
+        if (attempt.status !== 404 && attempt.status !== 400) {
+          break
+        }
+      }
+
+      if (!ok) {
+        for (const modelName of candidates.slice(0, 3)) {
+          const fallbackAttempt = await callModel(modelName, false)
+          rawResponseText = fallbackAttempt.text
+          if (fallbackAttempt.ok) {
+            ok = true
+            usedModel = modelName
+            break
+          }
+          lastError = `Errore Gemini API su ${modelName} (${fallbackAttempt.status}): ${fallbackAttempt.text.slice(0, 220)}`
+          if (fallbackAttempt.status !== 404 && fallbackAttempt.status !== 400) {
+            break
+          }
+        }
+      }
+
+      if (!ok) {
+        throw new Error(lastError || 'Errore nella chiamata a Gemini API.')
       }
 
       const geminiJson = JSON.parse(rawResponseText)
@@ -1335,7 +1420,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
       await supabase.from('audit_logs').insert([
         {
           user_email: userEmail,
-          action: `AI_ROUTE_RISK_ANALYSIS (${mission.client_vip}: ${mission.pickup_point} -> ${mission.dropoff_point}) -> ${threatLevel}`,
+          action: `AI_ROUTE_RISK_ANALYSIS [${usedModel}] (${mission.client_vip}: ${mission.pickup_point} -> ${mission.dropoff_point}) -> ${threatLevel}`,
           status: 'SUCCESS',
         },
       ])
@@ -2451,7 +2536,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                         rel="noopener noreferrer"
                         className="ml-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
                       >
-                        Rotta Maps &nearr;
+                        Rotta Maps ↗
                       </a>
                     </div>
 
@@ -2484,7 +2569,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                           rel="noopener noreferrer"
                           className="underline decoration-sky-600 hover:text-sky-200 font-semibold"
                         >
-                          Vedi su Maps &nearr;
+                          Vedi su Maps ↗
                         </a>
                       </div>
                     )}
@@ -2506,7 +2591,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
                             rel="noopener noreferrer"
                             className="underline decoration-red-500 hover:text-white font-semibold"
                           >
-                            Apri su Maps &nearr;
+                            Apri su Maps ↗
                           </a>
                         )}
                       </div>
