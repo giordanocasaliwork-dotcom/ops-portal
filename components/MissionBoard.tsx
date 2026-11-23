@@ -56,8 +56,10 @@ interface MissionRiskPanelProps {
   notes?: string | null
   risk?: RiskAssessment
   isAdmin: boolean
+  isAnalyzingAi: boolean
   userEmail: string
   userId: string
+  onRunAiAnalysis: () => void
   onRiskSaved: (missionId: string, updated: RiskAssessment) => void
   onAuditUpdated?: () => void
 }
@@ -74,8 +76,10 @@ function MissionRiskPanel({
   notes,
   risk,
   isAdmin,
+  isAnalyzingAi,
   userEmail,
   userId,
+  onRunAiAnalysis,
   onRiskSaved,
   onAuditUpdated,
 }: MissionRiskPanelProps) {
@@ -93,12 +97,24 @@ function MissionRiskPanel({
   const [evacuationRoute, setEvacuationRoute] = useState(risk?.evacuation_route || '')
   const [emergencyContacts, setEmergencyContacts] = useState(risk?.emergency_contacts || '')
 
+  useEffect(() => {
+    if (risk) {
+      setThreatLevel(risk.threat_level || 'LOW')
+      setChokePoints(risk.choke_points || '')
+      setSafeHavens(risk.safe_havens || '')
+      setMedicalFacilities(risk.medical_facilities || '')
+      setEvacuationRoute(risk.evacuation_route || '')
+      setEmergencyContacts(risk.emergency_contacts || '')
+      setEditing(false)
+    }
+  }, [risk])
+
   const buildMapsSearchUrl = (query: string) => {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+    return `[https://www.google.com/maps/search/?api=1&query=$](https://www.google.com/maps/search/?api=1&query=$){encodeURIComponent(query.trim())}`
   }
 
   const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+    return `[https://www.google.com/maps/dir/?api=1&origin=$](https://www.google.com/maps/dir/?api=1&origin=$){encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
   }
 
   const parseLines = (raw: string | null | undefined): string[] => {
@@ -173,10 +189,10 @@ function MissionRiskPanel({
       `Rotta Maps: ${buildMapsRouteUrl(pickupPoint, dropoffPoint)}`,
       `Assetto: ${assignedVehicle} | Op: ${operatorLabel}`,
       `Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
-      risk?.choke_points ? `Choke Points: ${risk.choke_points}` : null,
-      risk?.safe_havens ? `Safe Havens: ${risk.safe_havens}` : null,
-      risk?.medical_facilities ? `Strutture Sanitarie / DEA: ${risk.medical_facilities}` : null,
-      risk?.evacuation_route ? `Esfiltrazione / Alt. Route: ${risk.evacuation_route}` : null,
+      risk?.choke_points ? `Choke Points & Situazione:\n${risk.choke_points}` : null,
+      risk?.safe_havens ? `Safe Havens:\n${risk.safe_havens}` : null,
+      risk?.medical_facilities ? `Strutture Sanitarie / DEA:\n${risk.medical_facilities}` : null,
+      risk?.evacuation_route ? `Piano B / Esfiltrazione:\n${risk.evacuation_route}` : null,
       risk?.emergency_contacts ? `Contatti Emergenza: ${risk.emergency_contacts}` : null,
       notes ? `Note Logistica: ${notes}` : null,
     ].filter(Boolean)
@@ -197,9 +213,23 @@ function MissionRiskPanel({
     <div className="border-t border-neutral-800 pt-4 bg-neutral-900/60 rounded-lg p-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs uppercase tracking-wider font-bold text-emerald-400">
-          Scheda Intelligence - Risk Assessment &amp; Safe Havens
+          Scheda Intelligence - Risk Assessment, Safe Havens &amp; Piano B
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              disabled={isAnalyzingAi}
+              onClick={onRunAiAnalysis}
+              className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1 rounded transition disabled:opacity-50"
+            >
+              {isAnalyzingAi
+                ? 'Analisi AI Real-Time in corso...'
+                : risk
+                ? 'Aggiorna Analisi AI Real-Time'
+                : 'Genera Analisi AI Real-Time'}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCopyBriefing}
@@ -213,11 +243,17 @@ function MissionRiskPanel({
               onClick={() => setEditing(true)}
               className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
             >
-              {risk ? 'Modifica Scheda' : 'Compila Scheda'}
+              {risk ? 'Modifica Manuale' : 'Compila Manuale'}
             </button>
           )}
         </div>
       </div>
+
+      {isAnalyzingAi && (
+        <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded animate-pulse">
+          Valutazione tattica in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B...
+        </div>
+      )}
 
       {panelError && (
         <div className="p-2.5 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
@@ -252,17 +288,17 @@ function MissionRiskPanel({
                 type="text"
                 value={emergencyContacts}
                 onChange={(e) => setEmergencyContacts(e.target.value)}
-                placeholder="Es. NUE 112 - Centrale Operativa - Referente Location"
+                placeholder="Es. NUE 112 - CCISS 1518 - Centrale Operativa"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Choke Points &amp; Criticita Tratta
+                Choke Points &amp; Situazione Partenza / Arrivo
               </label>
               <textarea
-                rows={2}
+                rows={4}
                 value={chokePoints}
                 onChange={(e) => setChokePoints(e.target.value)}
                 placeholder="Svincoli congestionati, ZTL, cantieri, aree esposte"
@@ -275,10 +311,10 @@ function MissionRiskPanel({
                 Safe Havens &amp; Presidi FFOO (uno per riga per link Maps)
               </label>
               <textarea
-                rows={2}
+                rows={4}
                 value={safeHavens}
                 onChange={(e) => setSafeHavens(e.target.value)}
-                placeholder="Es. Stazione Carabinieri Valentano"
+                placeholder="Es. Stazione Carabinieri Roma EUR"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
@@ -288,23 +324,23 @@ function MissionRiskPanel({
                 Strutture Sanitarie / DEA (uno per riga per link Maps)
               </label>
               <textarea
-                rows={2}
+                rows={3}
                 value={medicalFacilities}
                 onChange={(e) => setMedicalFacilities(e.target.value)}
-                placeholder="Es. Ospedale Belcolle Viterbo DEA I Livello"
+                placeholder="Es. Ospedale Sant'Eugenio Roma"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Itinerario Alternativo / Esfiltrazione
+                Piano B — Itinerario Alternativo &amp; Esfiltrazione
               </label>
               <textarea
-                rows={2}
+                rows={3}
                 value={evacuationRoute}
                 onChange={(e) => setEvacuationRoute(e.target.value)}
-                placeholder="Percorso secondario in caso di blocco asse principale"
+                placeholder="Percorso secondario e svincoli di deviazione in caso di blocco asse principale"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
@@ -331,18 +367,18 @@ function MissionRiskPanel({
         </form>
       ) : risk ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
-              Choke Points &amp; Criticita Tratta
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
+            <div className="text-[10px] uppercase text-yellow-300 font-bold mb-1">
+              Choke Points &amp; Situazione Partenza / Arrivo (Percorso A)
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
               {risk.choke_points || 'Nessuna criticita segnalata.'}
             </div>
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-emerald-500 font-bold mb-1.5">
-              Safe Havens &amp; Presidi FFOO
+            <div className="text-[10px] uppercase text-emerald-400 font-bold mb-1.5">
+              Safe Havens &amp; Presidi FFOO Strategici
             </div>
             {safeHavenList.length > 0 ? (
               <div className="space-y-1.5">
@@ -366,8 +402,8 @@ function MissionRiskPanel({
           </div>
 
           <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1.5">
-              Strutture Sanitarie / DEA
+            <div className="text-[10px] uppercase text-sky-400 font-bold mb-1.5">
+              Strutture Sanitarie / DEA Lungo Tratta
             </div>
             {medicalList.length > 0 ? (
               <div className="space-y-1.5">
@@ -378,7 +414,7 @@ function MissionRiskPanel({
                       href={buildMapsSearchUrl(entry)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                      className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-400 border border-sky-800/70 transition"
                     >
                       Maps &nearr;
                     </a>
@@ -390,11 +426,11 @@ function MissionRiskPanel({
             )}
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold mb-1">
-              Itinerario Alternativo / Esfiltrazione
+          <div className="md:col-span-2 bg-neutral-950 border border-emerald-800/70 rounded p-3">
+            <div className="text-[10px] uppercase text-emerald-300 font-bold mb-1">
+              Piano B — Itinerario Alternativo &amp; Esfiltrazione
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
               {risk.evacuation_route || 'Nessun itinerario secondario inserito.'}
             </div>
           </div>
@@ -405,7 +441,7 @@ function MissionRiskPanel({
                 Contatti Emergenza:
               </span>
               <span className="text-neutral-200">
-                {risk.emergency_contacts || 'NUE 112 - Sala Operativa'}
+                {risk.emergency_contacts || 'NUE 112 - CCISS 1518'}
               </span>
             </div>
             {risk.updated_at && (
@@ -417,7 +453,7 @@ function MissionRiskPanel({
         </div>
       ) : (
         <div className="text-xs text-neutral-500 py-2">
-          Scheda Risk Assessment non ancora compilata per questa missione.
+          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI Real-Time&quot; per elaborare il percorso.
         </div>
       )}
     </div>
@@ -826,6 +862,8 @@ export default function MissionBoard({
   const [sendingTelegramBrief, setSendingTelegramBrief] = useState(false)
   const [telegramBriefStatus, setTelegramBriefStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [analyzingMissionId, setAnalyzingMissionId] = useState<string | null>(null)
+  const [autoAiOnCreate, setAutoAiOnCreate] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [checkingInId, setCheckingInId] = useState<string | null>(null)
@@ -854,11 +892,11 @@ export default function MissionBoard({
   const [vehCategory, setVehCategory] = useState('Executive')
 
   const buildMapsSearchUrl = (query: string) => {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
+    return `[https://www.google.com/maps/search/?api=1&query=$](https://www.google.com/maps/search/?api=1&query=$){encodeURIComponent(query.trim())}`
   }
 
   const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+    return `[https://www.google.com/maps/dir/?api=1&origin=$](https://www.google.com/maps/dir/?api=1&origin=$){encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
   }
 
   const formatIcsDate = (isoString: string) => {
@@ -966,6 +1004,55 @@ export default function MissionBoard({
       }
       return [...prev, updated]
     })
+  }
+
+  const runAiRouteRiskAnalysis = async (mission: Mission) => {
+    setAnalyzingMissionId(mission.id)
+    setExpandedRiskId(mission.id)
+    setExpandedBriefId(null)
+    setError(null)
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        throw new Error('Sessione non valida. Effettua nuovamente il login.')
+      }
+
+      const response = await fetch('/api/analyze-route', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          mission_id: mission.id,
+          client_vip: mission.client_vip,
+          pickup_point: mission.pickup_point,
+          dropoff_point: mission.dropoff_point,
+          start_time: mission.start_time,
+          end_time: mission.end_time,
+          assigned_vehicle: mission.assigned_vehicle,
+          notes: mission.notes,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Errore durante la valutazione AI del percorso.')
+      }
+
+      if (result.assessment) {
+        handleRiskSaved(mission.id, result.assessment as RiskAssessment)
+      }
+      if (onAuditUpdated) onAuditUpdated()
+    } catch (err: any) {
+      setError(err.message || 'Impossibile completare l analisi AI del percorso.')
+    } finally {
+      setAnalyzingMissionId(null)
+    }
   }
 
   const generateMorningBriefingText = () => {
@@ -1343,8 +1430,9 @@ export default function MissionBoard({
         },
       ])
 
-      if (data) {
-        setMissions((prev) => [data, ...prev])
+      const createdMission = data as Mission | null
+      if (createdMission) {
+        setMissions((prev) => [createdMission, ...prev])
       }
 
       setClientVip('')
@@ -1359,6 +1447,10 @@ export default function MissionBoard({
       setShowForm(false)
       if (onAuditUpdated) onAuditUpdated()
       router.refresh()
+
+      if (createdMission && autoAiOnCreate) {
+        await runAiRouteRiskAnalysis(createdMission)
+      }
     } catch (err: any) {
       setError(err.message || 'Errore durante la creazione della missione.')
     } finally {
@@ -1500,7 +1592,7 @@ export default function MissionBoard({
             Agenda Direzionale, Flotta &amp; Risk Assessment
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Pianificazione movimenti, dossier incontri, travel PNR, check-in GPS e safe havens
+            Pianificazione movimenti, analisi AI percorsi real-time, safe havens, choke points e Piano B
           </p>
         </div>
 
@@ -1838,7 +1930,7 @@ export default function MissionBoard({
                 required
                 value={pickupPoint}
                 onChange={(e) => setPickupPoint(e.target.value)}
-                placeholder="Indirizzo, terminal o coordinate"
+                placeholder="Indirizzo, terminal o citta di partenza (es. Roma EUR)"
                 className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
               />
             </div>
@@ -1852,7 +1944,7 @@ export default function MissionBoard({
                 required
                 value={dropoffPoint}
                 onChange={(e) => setDropoffPoint(e.target.value)}
-                placeholder="Destinazione o punto di rilascio"
+                placeholder="Destinazione o punto di rilascio (es. Milano Centro)"
                 className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
               />
             </div>
@@ -1871,11 +1963,23 @@ export default function MissionBoard({
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <label className="flex items-center gap-2 text-xs text-sky-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoAiOnCreate}
+                onChange={(e) => setAutoAiOnCreate(e.target.checked)}
+                className="accent-sky-400 w-4 h-4"
+              />
+              <span>
+                Elabora automaticamente Valutazione Rischio AI Real-Time (Safe Havens, Choke Points &amp; Piano B)
+              </span>
+            </label>
+
             <button
               type="submit"
               disabled={loading}
-              className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase tracking-wider px-5 py-2 rounded transition disabled:opacity-50"
+              className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase tracking-wider px-5 py-2 rounded transition disabled:opacity-50 shrink-0"
             >
               {loading ? 'Registrazione...' : 'Conferma e Registra'}
             </button>
@@ -1898,6 +2002,7 @@ export default function MissionBoard({
             const isConfirmingSos = sosConfirmId === mission.id
             const isSendingSos = sendingSosId === mission.id
             const sosAlert = sentSosAlerts[mission.id]
+            const isAnalyzingThis = analyzingMissionId === mission.id
 
             return (
               <div
@@ -2117,7 +2222,11 @@ export default function MissionBoard({
                           : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-800/80')
                       }
                     >
-                      {isRiskExpanded ? 'Chiudi Risk' : 'Risk & Safe Havens'}
+                      {isAnalyzingThis
+                        ? 'AI in corso...'
+                        : isRiskExpanded
+                        ? 'Chiudi Risk'
+                        : 'Risk & Safe Havens'}
                     </button>
 
                     {isAdmin && (
@@ -2169,33 +2278,11 @@ export default function MissionBoard({
                 </div>
 
                 {isBriefExpanded && (
-                  <ExecutiveBriefPanel
-                    mission={mission}
-                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
-                    risk={risk}
-                    brief={brief}
-                    userEmail={userEmail}
-                    userId={userId}
-                    onBriefSaved={handleBriefSaved}
-                    onAuditUpdated={onAuditUpdated}
-                  />
+                  <ExecutiveBriefPanel brief="{brief}" mission="{mission}" onAuditUpdated="{onAuditUpdated}" onBriefSaved="{handleBriefSaved}" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" risk="{risk}" userEmail="{userEmail}" userId="{userId}"/>
                 )}
 
                 {isRiskExpanded && (
-                  <MissionRiskPanel
-                    missionId={mission.id}
-                    clientVip={mission.client_vip}
-                    startTime={mission.start_time}
-                    endTime={mission.end_time}
-                    pickupPoint={mission.pickup_point}
-                    dropoffPoint={mission.dropoff_point}
-                    assignedVehicle={mission.assigned_vehicle}
-                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
-                    notes={mission.notes}
-                    risk={risk}
-                    isAdmin={isAdmin}
-                    userEmail={userEmail}
-                    userId={userId}
+                  <MissionRiskPanel assignedVehicle="{mission.assigned_vehicle}" clientVip="{mission.client_vip}" dropoffPoint="{mission.dropoff_point}" endTime="{mission.end_time}" isAdmin="{isAdmin}" isAnalyzingAi="{isAnalyzingThis}" missionId="{mission.id}" notes="{mission.notes}" onRunAiAnalysis="{()" operatorLabel="{formatOperatorLabel(mission.assigned_operator_id)}" pickupPoint="{mission.pickup_point}" risk="{risk}" startTime="{mission.start_time}" userEmail="{userEmail}" userId="{userId}"> runAiRouteRiskAnalysis(mission)}
                     onRiskSaved={handleRiskSaved}
                     onAuditUpdated={onAuditUpdated}
                   />
