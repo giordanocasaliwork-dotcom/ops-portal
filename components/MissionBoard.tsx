@@ -53,10 +53,6 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -273,7 +269,7 @@ function MissionRiskPanel({
 
       {isAnalyzingAi && (
         <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded animate-pulse">
-          Valutazione tattica in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B (con retry/fallback automatico)...
+          Valutazione tattica server-side in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B...
         </div>
       )}
 
@@ -1219,245 +1215,37 @@ export default function MissionBoard({
     setError(null)
 
     try {
-      const { data: rpcKey, error: rpcErr } = await supabase.rpc('get_gemini_api_key')
-      const apiKey = String(rpcKey || '').trim()
-
-      if (rpcErr || !apiKey || apiKey.startsWith('INCOLLA_QUI')) {
-        throw new Error(
-          'Chiave GEMINI_API_KEY non configurata in Supabase (tabella app_secrets). Inserisci la tua API key di Google AI Studio e riprova.'
-        )
-      }
-
-      const startFormatted = mission.start_time
-        ? new Date(mission.start_time).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })
-        : 'Non specificato'
-      const endFormatted = mission.end_time
-        ? new Date(mission.end_time).toLocaleString('it-IT', { timeZone: 'Europe/Rome' })
-        : 'Non specificato'
-
-      const prompt = `Sei un analista senior di Travel Risk Management, Executive Protection e Sicurezza Operativa.
-Esegui una valutazione tattica in tempo reale (verificando tramite ricerca web eventuali allerte meteo, traffico straordinario, cantieri critici, incidenti, scioperi o criticita di ordine pubblico odierne) per la seguente movimentazione:
-
-- Soggetto / Missione: ${mission.client_vip}
-- Punto di Partenza (Pick-up): ${mission.pickup_point}
-- Punto di Arrivo (Drop-off): ${mission.dropoff_point}
-- Finestra Oraria: ${startFormatted} -> ${endFormatted}
-- Assetto / Mezzo: ${mission.assigned_vehicle || 'Non specificato'}
-- Note Operative: ${mission.notes || 'Nessuna'}
-
-Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, nessun blocco markdown) con questa esatta struttura:
-{
-  "threat_level": "LOW" | "MODERATE" | "HIGH" | "CRITICAL",
-  "choke_points": "Testo strutturato in 3 sotto-blocchi chiari:\n1) SITUAZIONE PARTENZA (${mission.pickup_point}): analisi viabilita, ZTL, accessi e criticita attuali.\n2) CHOKE POINTS ITINERARIO PRINCIPALE (PERCORSO A): elenco dettagliato dei nodi critici, svincoli, valichi/gallerie, barriere autostradali e punti di rallentamento lungo la tratta.\n3) SITUAZIONE ARRIVO (${mission.dropoff_point}): analisi contesto locale, viabilita in avvicinamento e criticita.",
-  "safe_havens": "Elenco di 4-6 presidi strategici reali (Stazioni Carabinieri, Sottosezioni Polizia Stradale, Commissariati, aree sicure presidiate) posizionati presso partenza, snodi intermedi lungo l'itinerario e arrivo. IMPORTANTE: scrivi UN SOLO PRESIDIO PER RIGA con indirizzo/localita precisa (es. Sottosezione Polizia Stradale Firenze Nord - A1), senza elenchi puntati o numeri all'inizio della riga, cosi ogni riga generera un link diretto a Google Maps.",
-  "medical_facilities": "Elenco di 3-5 strutture ospedaliere reali con Pronto Soccorso / DEA di I o II livello lungo il corridoio e in prossimita di partenza e arrivo. IMPORTANTE: scrivi UNA SOLA STRUTTURA PER RIGA con citta/indirizzo (es. Ospedale Maggiore Carlo Alberto Pizzardi Bologna), senza elenchi puntati o numeri.",
-  "evacuation_route": "PIANO B (ITINERARIO ALTERNATIVO & ESFILTRAZIONE): descrivi una rotta alternativa completa e concreta (es. direttrice autostradale secondaria, superstrada E45/A15/statali principali) indicando esattamente a quale svincolo deviare in caso di blocco o emergenza sul Percorso A, piu le vie di esfiltrazione rapida dall'area di destinazione.",
-  "emergency_contacts": "Numeri e riferimenti operativi pertinenti alla tratta (NUE 112, CCISS Viaggiare Informati 1518, Polizia Stradale compartimenti interessati, Centrale Operativa)."
-}`
-
-      const modelsRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
-      )
-      if (!modelsRes.ok) {
-        const errTxt = await modelsRes.text()
-        throw new Error(`Errore lettura modelli Gemini (${modelsRes.status}): ${errTxt.slice(0, 220)}`)
-      }
-
-      const modelsData = (await modelsRes.json()) as {
-        models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>
-      }
-
-      const availableModels = (modelsData.models || [])
-        .filter(
-          (m) =>
-            typeof m.name === 'string' &&
-            m.name.includes('gemini') &&
-            Array.isArray(m.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes('generateContent') &&
-            !/embedding|imagen|veo|tts|audio|image|robotics|computer-use|aqa/i.test(m.name) &&
-            !m.name.endsWith('/gemini-2.5-flash')
-        )
-        .map((m) => m.name as string)
-
-      const sortedModels = [...availableModels].sort((a, b) => {
-        const score = (name: string) => {
-          let s = 0
-          if (name.includes('flash')) s += 100
-          if (name.includes('gemini-3')) s += 50
-          else if (name.includes('gemini-2.5')) s += 30
-          if (name.includes('latest')) s += 20
-          if (!name.includes('lite')) s += 10
-          if (!name.includes('exp') && !name.includes('preview')) s += 5
-          return s
-        }
-        return score(b) - score(a) || b.localeCompare(a)
+      const { data, error: fnErr } = await supabase.functions.invoke('analyze-route-risk', {
+        body: { mission_id: mission.id },
       })
 
-      const candidates = sortedModels.slice(0, 8)
-      if (candidates.length === 0) {
-        throw new Error('Nessun modello Gemini compatibile trovato per questa chiave API.')
-      }
-
-      const isTransientStatus = (status: number) =>
-        status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-
-      const callModelOnce = async (modelName: string, useSearchTool: boolean) => {
-        const payload: Record<string, unknown> = {
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-          },
-        }
-        if (useSearchTool) {
-          payload.tools = [{ google_search: {} }]
-        }
-
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${encodeURIComponent(
-            apiKey
-          )}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          }
-        )
-        const text = await res.text()
-        return { ok: res.ok, status: res.status, text }
-      }
-
-      const callModelWithRetry = async (
-        modelName: string,
-        useSearchTool: boolean,
-        maxRetries = 1
-      ) => {
-        let attempt = await callModelOnce(modelName, useSearchTool)
-        let retryCount = 0
-
-        while (!attempt.ok && isTransientStatus(attempt.status) && retryCount < maxRetries) {
-          retryCount += 1
-          await sleep(1800 * retryCount)
-          attempt = await callModelOnce(modelName, useSearchTool)
-        }
-
-        return attempt
-      }
-
-      let rawResponseText = ''
-      let lastError = ''
-      let usedModel = ''
-      let ok = false
-      let fatalAuthError = false
-
-      for (const modelName of candidates) {
-        const attempt = await callModelWithRetry(modelName, true, 1)
-        rawResponseText = attempt.text
-        if (attempt.ok) {
-          ok = true
-          usedModel = modelName
-          break
-        }
-        lastError = `Errore Gemini API su ${modelName} (${attempt.status}): ${attempt.text.slice(0, 220)}`
-        if (attempt.status === 401 || attempt.status === 403) {
-          fatalAuthError = true
-          break
-        }
-        // Continua sul modello successivo per 503, 429, 500, 502, 504, 404, 400
-      }
-
-      if (!ok && !fatalAuthError) {
-        for (const modelName of candidates.slice(0, 4)) {
-          const fallbackAttempt = await callModelWithRetry(modelName, false, 1)
-          rawResponseText = fallbackAttempt.text
-          if (fallbackAttempt.ok) {
-            ok = true
-            usedModel = `${modelName} (no-search)`
-            break
-          }
-          lastError = `Errore Gemini API su ${modelName} (${fallbackAttempt.status}): ${fallbackAttempt.text.slice(0, 220)}`
-          if (fallbackAttempt.status === 401 || fallbackAttempt.status === 403) {
-            break
+      if (fnErr) {
+        let detailedMsg = fnErr.message || 'Errore chiamata Edge Function analyze-route-risk.'
+        const ctx = (fnErr as { context?: Response }).context
+        if (ctx && typeof ctx.text === 'function') {
+          try {
+            const errBody = await ctx.text()
+            const parsedErr = JSON.parse(errBody) as { error?: string }
+            if (parsedErr?.error) {
+              detailedMsg = parsedErr.error
+            }
+          } catch {
+            // mantieni messaggio di default
           }
         }
+        throw new Error(detailedMsg)
       }
 
-      if (!ok) {
-        throw new Error(
-          lastError ||
-            'Tutti i modelli Gemini disponibili risultano momentaneamente occupati (503/429). Riprova tra 30 secondi.'
-        )
+      const responseData = data as { assessment?: RiskAssessment; error?: string } | null
+      if (responseData?.error) {
+        throw new Error(responseData.error)
       }
 
-      const geminiJson = JSON.parse(rawResponseText)
-      const rawText: string =
-        geminiJson?.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p.text || '')
-          .join('\n') || ''
-
-      if (!rawText.trim()) {
-        throw new Error('Risposta vuota ricevuta dal motore AI.')
+      if (!responseData?.assessment) {
+        throw new Error('Risposta vuota ricevuta dal server di analisi AI.')
       }
 
-      const codeFence = String.fromCharCode(96, 96, 96)
-      const cleanedJsonStr = rawText
-        .replace(new RegExp(`^${codeFence}json\\s*`, 'i'), '')
-        .replace(new RegExp(`^${codeFence}\\s*`, 'i'), '')
-        .replace(new RegExp(`\\s*${codeFence}$`, 'i'), '')
-        .trim()
-
-      const firstBrace = cleanedJsonStr.indexOf('{')
-      const lastBrace = cleanedJsonStr.lastIndexOf('}')
-      if (firstBrace === -1 || lastBrace === -1) {
-        throw new Error('Formato analisi AI non valido. Riprova.')
-      }
-
-      const parsed = JSON.parse(cleanedJsonStr.slice(firstBrace, lastBrace + 1))
-
-      const allowedLevels: ThreatLevel[] = ['LOW', 'MODERATE', 'HIGH', 'CRITICAL']
-      const rawLevel = String(parsed.threat_level || 'MODERATE').toUpperCase() as ThreatLevel
-      const threatLevel: ThreatLevel = allowedLevels.includes(rawLevel) ? rawLevel : 'MODERATE'
-
-      const assessmentPayload = {
-        mission_id: mission.id,
-        threat_level: threatLevel,
-        choke_points: String(parsed.choke_points || '').trim() || null,
-        safe_havens: String(parsed.safe_havens || '').trim() || null,
-        medical_facilities: String(parsed.medical_facilities || '').trim() || null,
-        evacuation_route: String(parsed.evacuation_route || '').trim() || null,
-        emergency_contacts:
-          String(parsed.emergency_contacts || '').trim() || 'NUE 112 - CCISS 1518',
-        updated_at: new Date().toISOString(),
-        updated_by: userId,
-      }
-
-      const { data: savedRow, error: upsertErr } = await supabase
-        .from('mission_risk_assessments')
-        .upsert(assessmentPayload, { onConflict: 'mission_id' })
-        .select()
-        .single()
-
-      if (upsertErr) {
-        throw new Error(`Analisi generata ma errore salvataggio su DB: ${upsertErr.message}`)
-      }
-
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `AI_ROUTE_RISK_ANALYSIS [${usedModel}] (${mission.client_vip}: ${mission.pickup_point} -> ${mission.dropoff_point}) -> ${threatLevel}`,
-          status: 'SUCCESS',
-        },
-      ])
-
-      if (savedRow) {
-        handleRiskSaved(mission.id, savedRow as RiskAssessment)
-      }
+      handleRiskSaved(mission.id, responseData.assessment)
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Impossibile completare l analisi AI del percorso.'))
