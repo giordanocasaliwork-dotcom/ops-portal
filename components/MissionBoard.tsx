@@ -1252,7 +1252,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (nessun testo prima o dopo, ne
 }`
 
       const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${encodeURIComponent(
           apiKey
         )}`,
         {
