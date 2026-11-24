@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../../utils/supabase/client'
+import AdminWeatherHazardPanel from '../../components/AdminWeatherHazardPanel'
 import MissionBoard, { Mission } from '../../components/MissionBoard'
 import ExecutiveAppointments, {
   ExecutiveAppointment,
@@ -778,6 +779,15 @@ export default function DashboardPage() {
             userEmail={user.email || ''}
             userId={user.id}
             onAuditUpdated={handleControlRoomSync}
+          />
+        )}
+
+        {isAdmin && (
+          <AdminWeatherHazardPanel
+            isAdmin={isAdmin}
+            userEmail={user.email || ''}
+            userId={user.id}
+            onAuditUpdated={refreshAuditLogs}
           />
         )}
 
