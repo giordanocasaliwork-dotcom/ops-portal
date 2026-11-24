@@ -112,7 +112,6 @@ function buildGeocodeCandidates(raw: string): string[] {
 
   const candidates = new Set<string>([clean])
 
-  // Se c'è una virgola (es. "Via Torino 15, Milano"), prova anche la parte dopo la virgola
   if (clean.includes(',')) {
     const parts = clean
       .split(',')
@@ -124,13 +123,11 @@ function buildGeocodeCandidates(raw: string): string[] {
     }
   }
 
-  // Se c'è un trattino (es. "Roma - Termini" o "Aeroporto Malpensa - T1"), prova la prima parte
   if (clean.includes(' - ')) {
     const firstPart = clean.split(' - ')[0].trim()
     if (firstPart) candidates.add(firstPart)
   }
 
-  // Rimuovi prefissi stradali comuni per estrarre la località
   const withoutStreet = clean
     .replace(
       /^(via|viale|piazza|piazzale|corso|largo|strada|vicolo|lungotevere|lungarno)\s+[^,0-9]+[0-9a-zA-Z/]*[\s,-]*/i,
@@ -141,7 +138,6 @@ function buildGeocodeCandidates(raw: string): string[] {
     candidates.add(withoutStreet)
   }
 
-  // Ultima parola significativa se composta da più termini (es. "Roma EUR" -> "Roma")
   const words = clean.split(/\s+/).filter((w) => w.length >= 3)
   if (words.length >= 2) {
     candidates.add(words[0])
@@ -163,6 +159,7 @@ export default function AdminWeatherHazardPanel({
   const [coords, setCoords] = useState<CoordinatesState | null>(null)
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [quakes, setQuakes] = useState<QuakeEvent[]>([])
+  const [quakeFeedStatus, setQuakeFeedStatus] = useState<'ok' | 'unavailable'>('ok')
   const [missionSummaries, setMissionSummaries] = useState<MissionHazardSummary[]>([])
   const [activeAlerts, setActiveAlerts] = useState<HazardAlertItem[]>([])
   const [loadingGps, setLoadingGps] = useState(false)
@@ -172,6 +169,12 @@ export default function AdminWeatherHazardPanel({
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const geocodeCacheRef = useRef<Record<string, { lat: number; lng: number; label: string }>>({})
+  const initializedRef = useRef(false)
+  const coordsRef = useRef<CoordinatesState | null>(null)
+
+  useEffect(() => {
+    coordsRef.current = coords
+  }, [coords])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -186,11 +189,16 @@ export default function AdminWeatherHazardPanel({
   }, [])
 
   const activeMissions = useMemo(
-    () =>
-      missions.filter(
-        (m) => m.status === 'pianificata' || m.status === 'in corso'
-      ),
+    () => missions.filter((m) => m.status === 'pianificata' || m.status === 'in corso'),
     [missions]
+  )
+
+  const activeMissionsSignature = useMemo(
+    () =>
+      activeMissions
+        .map((m) => `${m.id}:${m.status}:${m.pickup_point}:${m.dropoff_point}`)
+        .join('|'),
+    [activeMissions]
   )
 
   const resolveLocationName = async (lat: number, lng: number): Promise<string> => {
@@ -237,7 +245,6 @@ export default function AdminWeatherHazardPanel({
               longitude: number
               name: string
               admin1?: string
-              country_code?: string
             }>
           }
           const hit = data.results?.[0]
@@ -256,7 +263,7 @@ export default function AdminWeatherHazardPanel({
                   JSON.stringify(geocodeCacheRef.current)
                 )
               } catch {
-                // ignora quota storage
+                // ignora
               }
             }
             return resolved
@@ -275,23 +282,16 @@ export default function AdminWeatherHazardPanel({
     async (
       lat: number,
       lng: number
-    ): Promise<{ weather: WeatherSnapshot; quakes: QuakeEvent[] }> => {
+    ): Promise<{ weather: WeatherSnapshot; quakes: QuakeEvent[]; quakeOk: boolean }> => {
       const meteoUrl =
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
         `&current=temperature_2m,apparent_temperature,precipitation,rain,snowfall,weather_code,wind_gusts_10m` +
         `&hourly=temperature_2m,precipitation,snowfall,wind_gusts_10m` +
         `&forecast_hours=12&timezone=auto`
 
-      const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      const quakeUrl =
-        `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson` +
-        `&latitude=${lat}&longitude=${lng}` +
-        `&maxradiuskm=100&minmagnitude=3.0&starttime=${encodeURIComponent(sinceIso)}`
-
-      const [meteoRes, quakeRes] = await Promise.all([fetch(meteoUrl), fetch(quakeUrl)])
-
+      const meteoRes = await fetch(meteoUrl, { cache: 'no-store' })
       if (!meteoRes.ok) {
-        throw new Error(`Errore feed meteo (${meteoRes.status}).`)
+        throw new Error(`Feed meteo non raggiungibile (${meteoRes.status}).`)
       }
 
       const meteoJson = (await meteoRes.json()) as {
@@ -336,32 +336,46 @@ export default function AdminWeatherHazardPanel({
           hourlyTemp.length > 0 ? Math.min(...hourlyTemp) : Number(curr.temperature_2m ?? 0),
       }
 
+      // Feed sismico isolato: se USGS non risponde non blocca il meteo
       let parsedQuakes: QuakeEvent[] = []
-      if (quakeRes.ok) {
-        const quakeJson = (await quakeRes.json()) as {
-          features?: Array<{
-            id: string
-            properties?: { mag?: number; place?: string; time?: number }
-            geometry?: { coordinates?: [number, number, number] }
-          }>
-        }
+      let quakeOk = false
+      try {
+        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const quakeUrl =
+          `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson` +
+          `&latitude=${lat}&longitude=${lng}` +
+          `&maxradiuskm=100&minmagnitude=3.0&starttime=${encodeURIComponent(sinceIso)}`
 
-        parsedQuakes = (quakeJson.features || [])
-          .map((f) => {
-            const qLng = f.geometry?.coordinates?.[0] ?? lng
-            const qLat = f.geometry?.coordinates?.[1] ?? lat
-            return {
-              id: f.id,
-              magnitude: Number(f.properties?.mag ?? 0),
-              place: String(f.properties?.place || 'Area limitrofa'),
-              time: Number(f.properties?.time ?? Date.now()),
-              distanceKm: haversineKm(lat, lng, qLat, qLng),
-            }
-          })
-          .sort((a, b) => b.time - a.time)
+        const quakeRes = await fetch(quakeUrl, { cache: 'no-store' })
+        if (quakeRes.ok) {
+          quakeOk = true
+          const quakeJson = (await quakeRes.json()) as {
+            features?: Array<{
+              id: string
+              properties?: { mag?: number; place?: string; time?: number }
+              geometry?: { coordinates?: [number, number, number] }
+            }>
+          }
+
+          parsedQuakes = (quakeJson.features || [])
+            .map((f) => {
+              const qLng = f.geometry?.coordinates?.[0] ?? lng
+              const qLat = f.geometry?.coordinates?.[1] ?? lat
+              return {
+                id: f.id,
+                magnitude: Number(f.properties?.mag ?? 0),
+                place: String(f.properties?.place || 'Area limitrofa'),
+                time: Number(f.properties?.time ?? Date.now()),
+                distanceKm: haversineKm(lat, lng, qLat, qLng),
+              }
+            })
+            .sort((a, b) => b.time - a.time)
+        }
+      } catch {
+        quakeOk = false
       }
 
-      return { weather: snapshot, quakes: parsedQuakes }
+      return { weather: snapshot, quakes: parsedQuakes, quakeOk }
     },
     []
   )
@@ -369,19 +383,24 @@ export default function AdminWeatherHazardPanel({
   const persistAdminLocation = useCallback(
     async (nextCoords: CoordinatesState) => {
       setCoords(nextCoords)
+      coordsRef.current = nextCoords
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('ops_admin_coords', JSON.stringify(nextCoords))
       }
-      await supabase.from('admin_hazard_state').upsert(
-        {
-          user_id: userId,
-          latitude: nextCoords.lat,
-          longitude: nextCoords.lng,
-          location_label: nextCoords.label,
-          updated_at: nextCoords.updatedAt,
-        },
-        { onConflict: 'user_id' }
-      )
+      try {
+        await supabase.from('admin_hazard_state').upsert(
+          {
+            user_id: userId,
+            latitude: nextCoords.lat,
+            longitude: nextCoords.lng,
+            location_label: nextCoords.label,
+            updated_at: nextCoords.updatedAt,
+          },
+          { onConflict: 'user_id' }
+        )
+      } catch {
+        // non bloccare UI se il salvataggio remoto ritarda
+      }
     },
     [supabase, userId]
   )
@@ -392,14 +411,18 @@ export default function AdminWeatherHazardPanel({
       let sentAny = false
 
       for (const item of alerts) {
-        const { data, error } = await supabase.rpc('dispatch_admin_hazard_alert', {
-          p_alert_key: item.key,
-          p_severity: item.severity,
-          p_title: item.title,
-          p_details: item.details,
-        })
-        if (!error && data === 'DISPATCHED') {
-          sentAny = true
+        try {
+          const { data, error } = await supabase.rpc('dispatch_admin_hazard_alert', {
+            p_alert_key: item.key,
+            p_severity: item.severity,
+            p_title: item.title,
+            p_details: item.details,
+          })
+          if (!error && data === 'DISPATCHED') {
+            sentAny = true
+          }
+        } catch {
+          // continua con gli altri alert
         }
       }
 
@@ -422,7 +445,6 @@ export default function AdminWeatherHazardPanel({
       const alerts: HazardAlertItem[] = []
       const dateBucket = new Date().toISOString().slice(0, 10)
 
-      // 1. Piogge alluvionali / Nubifragi / Temporali violenti
       if (
         w.rainNow >= 15 ||
         w.maxRain12h >= 20 ||
@@ -441,7 +463,6 @@ export default function AdminWeatherHazardPanel({
         })
       }
 
-      // 2. Caldo estremo
       if (w.temperature >= 37 || w.apparentTemperature >= 39 || w.maxTemp12h >= 38) {
         const peak = Math.max(w.temperature, w.apparentTemperature, w.maxTemp12h)
         const isCritical = peak >= 40
@@ -454,7 +475,6 @@ export default function AdminWeatherHazardPanel({
         })
       }
 
-      // 3. Forti nevicate / Gelicidio / Freddo estremo
       if (
         w.snowfallNow >= 4 ||
         w.sumSnow12h >= 15 ||
@@ -474,7 +494,6 @@ export default function AdminWeatherHazardPanel({
         })
       }
 
-      // 4. Venti di burrasca / Tempesta
       if (w.windGustsNow >= 75 || w.maxGusts12h >= 80) {
         const maxGust = Math.max(w.windGustsNow, w.maxGusts12h)
         const isCritical = maxGust >= 95
@@ -487,7 +506,6 @@ export default function AdminWeatherHazardPanel({
         })
       }
 
-      // 5. Terremoti recenti entro 100 km (magnitudo >= 3.5)
       const significantQuakes = recentQuakes.filter((q) => q.magnitude >= 3.5)
       if (significantQuakes.length > 0) {
         const strongest = significantQuakes.sort((a, b) => b.magnitude - a.magnitude)[0]
@@ -518,11 +536,11 @@ export default function AdminWeatherHazardPanel({
       try {
         const combinedAlerts: HazardAlertItem[] = []
 
-        // 1. Controllo posizione attuale Admin
         if (targetCoords) {
           const adminEnv = await fetchPointEnvironmental(targetCoords.lat, targetCoords.lng)
           setWeather(adminEnv.weather)
           setQuakes(adminEnv.quakes)
+          setQuakeFeedStatus(adminEnv.quakeOk ? 'ok' : 'unavailable')
 
           const locKey = `admin_${targetCoords.lat.toFixed(1)}_${targetCoords.lng.toFixed(1)}`
           const adminAlerts = evaluatePointHazards(
@@ -534,7 +552,6 @@ export default function AdminWeatherHazardPanel({
           combinedAlerts.push(...adminAlerts)
         }
 
-        // 2. Controllo punti di partenza e arrivo delle missioni pianificate o in corso
         const uniqueRawPlaces = Array.from(
           new Set(
             activeMissions
@@ -611,7 +628,10 @@ export default function AdminWeatherHazardPanel({
           await dispatchAlertsToBackend(combinedAlerts)
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Errore aggiornamento meteo/calamita.'
+        const msg =
+          err instanceof Error
+            ? `Errore connessione feed meteo: ${err.message}`
+            : 'Errore aggiornamento meteo/calamita.'
         setPanelError(msg)
       } finally {
         setCheckingFeed(false)
@@ -660,40 +680,40 @@ export default function AdminWeatherHazardPanel({
         } else {
           setPanelError('Impossibile rilevare la posizione GPS attuale.')
         }
-        refreshEnvironmentalData(coords)
+        refreshEnvironmentalData(coordsRef.current)
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     )
-  }, [coords, persistAdminLocation, refreshEnvironmentalData])
+  }, [persistAdminLocation, refreshEnvironmentalData])
 
-  // Ripristina ultima posizione salvata o avvia GPS all'apertura
+  // Inizializza una sola volta al mount
   useEffect(() => {
-    if (!isAdmin) return
-
-    let cancelled = false
+    if (!isAdmin || initializedRef.current) return
+    initializedRef.current = true
 
     const init = async () => {
-      const { data } = await supabase
-        .from('admin_hazard_state')
-        .select('latitude, longitude, location_label, updated_at')
-        .eq('user_id', userId)
-        .maybeSingle()
+      try {
+        const { data } = await supabase
+          .from('admin_hazard_state')
+          .select('latitude, longitude, location_label, updated_at')
+          .eq('user_id', userId)
+          .maybeSingle()
 
-      if (
-        !cancelled &&
-        data &&
-        typeof data.latitude === 'number' &&
-        typeof data.longitude === 'number'
-      ) {
-        const saved: CoordinatesState = {
-          lat: data.latitude,
-          lng: data.longitude,
-          label: data.location_label || `${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`,
-          updatedAt: data.updated_at || new Date().toISOString(),
+        if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+          const saved: CoordinatesState = {
+            lat: data.latitude,
+            lng: data.longitude,
+            label:
+              data.location_label || `${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`,
+            updatedAt: data.updated_at || new Date().toISOString(),
+          }
+          setCoords(saved)
+          coordsRef.current = saved
+          await refreshEnvironmentalData(saved)
+          return
         }
-        setCoords(saved)
-        await refreshEnvironmentalData(saved)
-        return
+      } catch {
+        // usa fallback localStorage
       }
 
       if (typeof window !== 'undefined') {
@@ -701,8 +721,9 @@ export default function AdminWeatherHazardPanel({
         if (raw) {
           try {
             const parsed = JSON.parse(raw) as CoordinatesState
-            if (!cancelled && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+            if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
               setCoords(parsed)
+              coordsRef.current = parsed
               await refreshEnvironmentalData(parsed)
               return
             }
@@ -712,48 +733,60 @@ export default function AdminWeatherHazardPanel({
         }
       }
 
-      if (!cancelled) {
-        detectCurrentPosition()
-      }
+      detectCurrentPosition()
     }
 
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, userId])
 
-    return () => {
-      cancelled = true
+  // Aggiorna solo le tratte se cambiano le missioni attive dopo l'avvio
+  useEffect(() => {
+    if (!isAdmin || !initializedRef.current) return
+    if (!activeMissionsSignature) {
+      setMissionSummaries([])
+      return
     }
-  }, [isAdmin, supabase, userId, refreshEnvironmentalData, detectCurrentPosition])
+    refreshEnvironmentalData(coordsRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMissionsSignature])
 
   // Auto-refresh ogni 10 minuti
   useEffect(() => {
     if (!isAdmin) return
     const interval = setInterval(() => {
-      refreshEnvironmentalData(coords)
+      refreshEnvironmentalData(coordsRef.current)
     }, 10 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [isAdmin, coords, refreshEnvironmentalData])
+  }, [isAdmin, refreshEnvironmentalData])
 
   const handleTriggerTestAlert = async () => {
     const locLabel = coords?.label || 'Posizione Admin'
     const testKey = `test_alert_${Date.now()}`
-    const { data, error } = await supabase.rpc('dispatch_admin_hazard_alert', {
-      p_alert_key: testKey,
-      p_severity: 'HIGH',
-      p_title: `Test Sistema Allerta Meteo & Calamita (${locLabel})`,
-      p_details: `Verifica operativa attivata da ${userEmail}. Coordinate: ${
-        coords ? `${coords.lat}, ${coords.lng}` : 'N/D'
-      } | Missioni monitorate: ${activeMissions.length}.`,
-    })
+    try {
+      const { data, error } = await supabase.rpc('dispatch_admin_hazard_alert', {
+        p_alert_key: testKey,
+        p_severity: 'HIGH',
+        p_title: `Test Sistema Allerta Meteo & Calamita (${locLabel})`,
+        p_details: `Verifica operativa attivata da ${userEmail}. Coordinate: ${
+          coords ? `${coords.lat}, ${coords.lng}` : 'N/D'
+        } | Missioni monitorate: ${activeMissions.length}.`,
+      })
 
-    if (error) {
-      setPanelError(`Errore invio test alert: ${error.message}`)
-      return
-    }
+      if (error) {
+        setPanelError(`Errore invio test alert: ${error.message}`)
+        return
+      }
 
-    if (data === 'DISPATCHED') {
-      setStatusBanner('Alert di test inviato su Telegram e registrato in Audit Log.')
-      if (onAuditUpdated) onAuditUpdated()
-      setTimeout(() => setStatusBanner(null), 5000)
+      if (data === 'DISPATCHED') {
+        setStatusBanner('Alert di test inviato su Telegram e registrato in Audit Log.')
+        if (onAuditUpdated) onAuditUpdated()
+        setTimeout(() => setStatusBanner(null), 5000)
+      }
+    } catch (err: unknown) {
+      setPanelError(
+        err instanceof Error ? `Errore rete test alert: ${err.message}` : 'Errore invio test alert.'
+      )
     }
   }
 
@@ -761,10 +794,10 @@ export default function AdminWeatherHazardPanel({
 
   return (
     <div className="bg-neutral-900 border-2 border-sky-500/70 rounded-lg p-5 shadow-xl space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-sky-500/30 pb-3">
-        <div>
+      <div className="flex flex-col gap-3 border-b border-sky-500/30 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase">
+            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase shrink-0">
               SOLO ADMIN
             </span>
             <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
@@ -772,9 +805,9 @@ export default function AdminWeatherHazardPanel({
             </h2>
             <span
               className={
-                'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                'px-2 py-0.5 rounded border text-[10px] uppercase font-bold shrink-0 ' +
                 (activeAlerts.length > 0
-                  ? 'bg-red-950 text-red-300 border-red-600 animate-pulse'
+                  ? 'bg-red-950 text-red-300 border-red-600'
                   : 'bg-emerald-950/70 text-emerald-300 border-emerald-700')
               }
             >
@@ -783,46 +816,47 @@ export default function AdminWeatherHazardPanel({
                 : 'NESSUNA CRITICITA'}
             </span>
           </div>
-          <p className="text-xs text-neutral-400 mt-1">
-            Posizione Admin:{' '}
-            <strong className="text-neutral-200">
-              {coords
-                ? `${coords.label} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
-                : 'In attesa di GPS...'}
-            </strong>
-            {' • '}Missioni attive monitorate:{' '}
-            <strong className="text-sky-300">{activeMissions.length}</strong>
-            {lastCheckTime ? ` • Ultimo check: ${lastCheckTime}` : ''}
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={loadingGps}
+              onClick={detectCurrentPosition}
+              className="shrink-0 bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+            >
+              {loadingGps ? 'Rilevamento GPS...' : 'Aggiorna Posizione GPS'}
+            </button>
+
+            <button
+              type="button"
+              disabled={checkingFeed}
+              onClick={() => refreshEnvironmentalData(coordsRef.current)}
+              className="shrink-0 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+            >
+              {checkingFeed ? 'Controllo...' : 'Aggiorna Meteo/Sisma'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleTriggerTestAlert}
+              className="shrink-0 bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-[11px] uppercase px-3 py-1.5 rounded transition"
+            >
+              Test Alert Telegram
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={loadingGps}
-            onClick={detectCurrentPosition}
-            className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
-          >
-            {loadingGps ? 'Rilevamento GPS...' : 'Aggiorna Posizione GPS'}
-          </button>
-
-          <button
-            type="button"
-            disabled={checkingFeed}
-            onClick={() => refreshEnvironmentalData(coords)}
-            className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
-          >
-            {checkingFeed ? 'Controllo...' : 'Aggiorna Meteo/Sisma'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleTriggerTestAlert}
-            className="bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-xs uppercase px-3 py-1.5 rounded transition"
-          >
-            Test Alert Telegram
-          </button>
-        </div>
+        <p className="text-xs text-neutral-400">
+          Posizione Admin:{' '}
+          <strong className="text-neutral-200">
+            {coords
+              ? `${coords.label} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
+              : 'In attesa di GPS...'}
+          </strong>
+          {' • '}Missioni attive monitorate:{' '}
+          <strong className="text-sky-300">{activeMissions.length}</strong>
+          {lastCheckTime ? ` • Ultimo check: ${lastCheckTime}` : ''}
+        </p>
       </div>
 
       {statusBanner && (
@@ -910,7 +944,9 @@ export default function AdminWeatherHazardPanel({
               Sismica (100 km / 24h)
             </div>
             <div className="text-neutral-100 font-semibold mt-1">
-              {quakes.length > 0
+              {quakeFeedStatus === 'unavailable'
+                ? 'Feed USGS in attesa'
+                : quakes.length > 0
                 ? `M${quakes[0].magnitude.toFixed(1)} (${quakes[0].distanceKm.toFixed(0)} km)`
                 : 'Nessun evento ≥ M3.0'}
             </div>
