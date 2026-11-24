@@ -785,6 +785,7 @@ export default function DashboardPage() {
         {isAdmin && (
           <AdminWeatherHazardPanel
             isAdmin={isAdmin}
+            missions={missions}
             userEmail={user.email || ''}
             userId={user.id}
             onAuditUpdated={refreshAuditLogs}
