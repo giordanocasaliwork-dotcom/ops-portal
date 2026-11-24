@@ -76,6 +76,20 @@ interface MissionHazardSummary {
   alerts: HazardAlertItem[]
 }
 
+interface CachedEnvEntry {
+  timestamp: number
+  weather: WeatherSnapshot
+  quakes: QuakeEvent[]
+  quakeOk: boolean
+}
+
+const ENV_CACHE_STORAGE_KEY = 'ops_env_feed_cache_v2'
+const ENV_CACHE_TTL_MS = 15 * 60 * 1000 // 15 minuti di cache locale anti-429
+
+function getCoordCacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)}_${lng.toFixed(2)}`
+}
+
 function getWeatherDescription(code: number): string {
   if (code === 0) return 'Cielo sereno'
   if (code === 1 || code === 2) return 'Parzialmente nuvoloso'
@@ -147,6 +161,32 @@ function buildGeocodeCandidates(raw: string): string[] {
   return Array.from(candidates)
 }
 
+function parseOpenMeteoNode(node: any): WeatherSnapshot {
+  const curr = node?.current || {}
+  const hourlyTemp: number[] = node?.hourly?.temperature_2m || []
+  const hourlyPrecip: number[] = node?.hourly?.precipitation || []
+  const hourlySnow: number[] = node?.hourly?.snowfall || []
+  const hourlyGusts: number[] = node?.hourly?.wind_gusts_10m || []
+
+  return {
+    temperature: Number(curr.temperature_2m ?? 0),
+    apparentTemperature: Number(curr.apparent_temperature ?? curr.temperature_2m ?? 0),
+    precipitationNow: Number(curr.precipitation ?? 0),
+    rainNow: Number(curr.rain ?? 0),
+    snowfallNow: Number(curr.snowfall ?? 0),
+    windGustsNow: Number(curr.wind_gusts_10m ?? 0),
+    weatherCode: Number(curr.weather_code ?? 0),
+    maxRain12h: hourlyPrecip.length > 0 ? Math.max(...hourlyPrecip) : 0,
+    sumRain12h: hourlyPrecip.reduce((acc, v) => acc + (Number(v) || 0), 0),
+    sumSnow12h: hourlySnow.reduce((acc, v) => acc + (Number(v) || 0), 0),
+    maxGusts12h: hourlyGusts.length > 0 ? Math.max(...hourlyGusts) : 0,
+    maxTemp12h:
+      hourlyTemp.length > 0 ? Math.max(...hourlyTemp) : Number(curr.temperature_2m ?? 0),
+    minTemp12h:
+      hourlyTemp.length > 0 ? Math.min(...hourlyTemp) : Number(curr.temperature_2m ?? 0),
+  }
+}
+
 export default function AdminWeatherHazardPanel({
   isAdmin,
   userEmail,
@@ -160,6 +200,7 @@ export default function AdminWeatherHazardPanel({
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [quakes, setQuakes] = useState<QuakeEvent[]>([])
   const [quakeFeedStatus, setQuakeFeedStatus] = useState<'ok' | 'unavailable'>('ok')
+  const [feedNotice, setFeedNotice] = useState<string | null>(null)
   const [missionSummaries, setMissionSummaries] = useState<MissionHazardSummary[]>([])
   const [activeAlerts, setActiveAlerts] = useState<HazardAlertItem[]>([])
   const [loadingGps, setLoadingGps] = useState(false)
@@ -169,8 +210,10 @@ export default function AdminWeatherHazardPanel({
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const geocodeCacheRef = useRef<Record<string, { lat: number; lng: number; label: string }>>({})
+  const envCacheRef = useRef<Record<string, CachedEnvEntry>>({})
   const initializedRef = useRef(false)
   const coordsRef = useRef<CoordinatesState | null>(null)
+  const rateLimitUntilRef = useRef<number>(0)
 
   useEffect(() => {
     coordsRef.current = coords
@@ -179,12 +222,25 @@ export default function AdminWeatherHazardPanel({
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const raw = window.localStorage.getItem('ops_geocode_cache_v1')
-      if (raw) {
-        geocodeCacheRef.current = JSON.parse(raw)
-      }
+      const rawGeo = window.localStorage.getItem('ops_geocode_cache_v1')
+      if (rawGeo) geocodeCacheRef.current = JSON.parse(rawGeo)
     } catch {
-      // ignora cache corrotta
+      // ignora
+    }
+    try {
+      const rawEnv = window.localStorage.getItem(ENV_CACHE_STORAGE_KEY)
+      if (rawEnv) envCacheRef.current = JSON.parse(rawEnv)
+    } catch {
+      // ignora
+    }
+  }, [])
+
+  const saveEnvCache = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(ENV_CACHE_STORAGE_KEY, JSON.stringify(envCacheRef.current))
+    } catch {
+      // ignora quota storage
     }
   }, [])
 
@@ -238,6 +294,7 @@ export default function AdminWeatherHazardPanel({
             candidate
           )}&count=1&language=it&format=json`
           const res = await fetch(url)
+          if (res.status === 429) break
           if (!res.ok) continue
           const data = (await res.json()) as {
             results?: Array<{
@@ -278,67 +335,8 @@ export default function AdminWeatherHazardPanel({
     []
   )
 
-  const fetchPointEnvironmental = useCallback(
-    async (
-      lat: number,
-      lng: number
-    ): Promise<{ weather: WeatherSnapshot; quakes: QuakeEvent[]; quakeOk: boolean }> => {
-      const meteoUrl =
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-        `&current=temperature_2m,apparent_temperature,precipitation,rain,snowfall,weather_code,wind_gusts_10m` +
-        `&hourly=temperature_2m,precipitation,snowfall,wind_gusts_10m` +
-        `&forecast_hours=12&timezone=auto`
-
-      const meteoRes = await fetch(meteoUrl, { cache: 'no-store' })
-      if (!meteoRes.ok) {
-        throw new Error(`Feed meteo non raggiungibile (${meteoRes.status}).`)
-      }
-
-      const meteoJson = (await meteoRes.json()) as {
-        current?: {
-          temperature_2m?: number
-          apparent_temperature?: number
-          precipitation?: number
-          rain?: number
-          snowfall?: number
-          weather_code?: number
-          wind_gusts_10m?: number
-        }
-        hourly?: {
-          temperature_2m?: number[]
-          precipitation?: number[]
-          snowfall?: number[]
-          wind_gusts_10m?: number[]
-        }
-      }
-
-      const curr = meteoJson.current || {}
-      const hourlyTemp = meteoJson.hourly?.temperature_2m || []
-      const hourlyPrecip = meteoJson.hourly?.precipitation || []
-      const hourlySnow = meteoJson.hourly?.snowfall || []
-      const hourlyGusts = meteoJson.hourly?.wind_gusts_10m || []
-
-      const snapshot: WeatherSnapshot = {
-        temperature: Number(curr.temperature_2m ?? 0),
-        apparentTemperature: Number(curr.apparent_temperature ?? curr.temperature_2m ?? 0),
-        precipitationNow: Number(curr.precipitation ?? 0),
-        rainNow: Number(curr.rain ?? 0),
-        snowfallNow: Number(curr.snowfall ?? 0),
-        windGustsNow: Number(curr.wind_gusts_10m ?? 0),
-        weatherCode: Number(curr.weather_code ?? 0),
-        maxRain12h: hourlyPrecip.length > 0 ? Math.max(...hourlyPrecip) : 0,
-        sumRain12h: hourlyPrecip.reduce((acc, v) => acc + (Number(v) || 0), 0),
-        sumSnow12h: hourlySnow.reduce((acc, v) => acc + (Number(v) || 0), 0),
-        maxGusts12h: hourlyGusts.length > 0 ? Math.max(...hourlyGusts) : 0,
-        maxTemp12h:
-          hourlyTemp.length > 0 ? Math.max(...hourlyTemp) : Number(curr.temperature_2m ?? 0),
-        minTemp12h:
-          hourlyTemp.length > 0 ? Math.min(...hourlyTemp) : Number(curr.temperature_2m ?? 0),
-      }
-
-      // Feed sismico isolato: se USGS non risponde non blocca il meteo
-      let parsedQuakes: QuakeEvent[] = []
-      let quakeOk = false
+  const fetchUsgsQuakes = useCallback(
+    async (lat: number, lng: number): Promise<{ quakes: QuakeEvent[]; ok: boolean }> => {
       try {
         const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
         const quakeUrl =
@@ -346,38 +344,122 @@ export default function AdminWeatherHazardPanel({
           `&latitude=${lat}&longitude=${lng}` +
           `&maxradiuskm=100&minmagnitude=3.0&starttime=${encodeURIComponent(sinceIso)}`
 
-        const quakeRes = await fetch(quakeUrl, { cache: 'no-store' })
-        if (quakeRes.ok) {
-          quakeOk = true
-          const quakeJson = (await quakeRes.json()) as {
-            features?: Array<{
-              id: string
-              properties?: { mag?: number; place?: string; time?: number }
-              geometry?: { coordinates?: [number, number, number] }
-            }>
-          }
+        const quakeRes = await fetch(quakeUrl)
+        if (!quakeRes.ok) return { quakes: [], ok: false }
 
-          parsedQuakes = (quakeJson.features || [])
-            .map((f) => {
-              const qLng = f.geometry?.coordinates?.[0] ?? lng
-              const qLat = f.geometry?.coordinates?.[1] ?? lat
-              return {
-                id: f.id,
-                magnitude: Number(f.properties?.mag ?? 0),
-                place: String(f.properties?.place || 'Area limitrofa'),
-                time: Number(f.properties?.time ?? Date.now()),
-                distanceKm: haversineKm(lat, lng, qLat, qLng),
-              }
-            })
-            .sort((a, b) => b.time - a.time)
+        const quakeJson = (await quakeRes.json()) as {
+          features?: Array<{
+            id: string
+            properties?: { mag?: number; place?: string; time?: number }
+            geometry?: { coordinates?: [number, number, number] }
+          }>
         }
-      } catch {
-        quakeOk = false
-      }
 
-      return { weather: snapshot, quakes: parsedQuakes, quakeOk }
+        const parsedQuakes = (quakeJson.features || [])
+          .map((f) => {
+            const qLng = f.geometry?.coordinates?.[0] ?? lng
+            const qLat = f.geometry?.coordinates?.[1] ?? lat
+            return {
+              id: f.id,
+              magnitude: Number(f.properties?.mag ?? 0),
+              place: String(f.properties?.place || 'Area limitrofa'),
+              time: Number(f.properties?.time ?? Date.now()),
+              distanceKm: haversineKm(lat, lng, qLat, qLng),
+            }
+          })
+          .sort((a, b) => b.time - a.time)
+
+        return { quakes: parsedQuakes, ok: true }
+      } catch {
+        return { quakes: [], ok: false }
+      }
     },
     []
+  )
+
+  // Recupera meteo + sismica per tutte le coordinate richieste usando cache 15 min + singola chiamata batch Open-Meteo
+  const fetchPointsBatch = useCallback(
+    async (
+      points: Array<{ key: string; lat: number; lng: number }>,
+      forceFresh: boolean
+    ): Promise<{
+      dataMap: Map<string, CachedEnvEntry>
+      usedCacheFallback: boolean
+      rateLimited: boolean
+    }> => {
+      const dataMap = new Map<string, CachedEnvEntry>()
+      const now = Date.now()
+      const toFetch: Array<{ key: string; lat: number; lng: number }> = []
+
+      for (const pt of points) {
+        const cached = envCacheRef.current[pt.key]
+        if (!forceFresh && cached && now - cached.timestamp < ENV_CACHE_TTL_MS) {
+          dataMap.set(pt.key, cached)
+        } else {
+          toFetch.push(pt)
+        }
+      }
+
+      if (toFetch.length === 0) {
+        return { dataMap, usedCacheFallback: false, rateLimited: false }
+      }
+
+      // Se siamo in finestra di rate-limit (429 recente), usa eventuali dati in cache anche se > 15 min
+      if (now < rateLimitUntilRef.current) {
+        for (const pt of toFetch) {
+          const stale = envCacheRef.current[pt.key]
+          if (stale) dataMap.set(pt.key, stale)
+        }
+        return { dataMap, usedCacheFallback: true, rateLimited: true }
+      }
+
+      const latsParam = toFetch.map((p) => p.lat).join(',')
+      const lngsParam = toFetch.map((p) => p.lng).join(',')
+      const batchUrl =
+        `https://api.open-meteo.com/v1/forecast?latitude=${latsParam}&longitude=${lngsParam}` +
+        `&current=temperature_2m,apparent_temperature,precipitation,rain,snowfall,weather_code,wind_gusts_10m` +
+        `&hourly=temperature_2m,precipitation,snowfall,wind_gusts_10m` +
+        `&forecast_hours=12&timezone=auto`
+
+      const meteoRes = await fetch(batchUrl)
+
+      if (meteoRes.status === 429) {
+        rateLimitUntilRef.current = Date.now() + 5 * 60 * 1000 // pausa 5 min su 429
+        for (const pt of toFetch) {
+          const stale = envCacheRef.current[pt.key]
+          if (stale) dataMap.set(pt.key, stale)
+        }
+        return { dataMap, usedCacheFallback: true, rateLimited: true }
+      }
+
+      if (!meteoRes.ok) {
+        throw new Error(`Feed meteo temporaneamente non disponibile (${meteoRes.status}).`)
+      }
+
+      const rawJson = await meteoRes.json()
+      const nodes: any[] = Array.isArray(rawJson) ? rawJson : [rawJson]
+
+      for (let i = 0; i < toFetch.length; i++) {
+        const pt = toFetch[i]
+        const node = nodes[i]
+        if (!node) continue
+        const weatherSnap = parseOpenMeteoNode(node)
+        const quakeRes = await fetchUsgsQuakes(pt.lat, pt.lng)
+
+        const entry: CachedEnvEntry = {
+          timestamp: Date.now(),
+          weather: weatherSnap,
+          quakes: quakeRes.quakes,
+          quakeOk: quakeRes.ok,
+        }
+        envCacheRef.current[pt.key] = entry
+        dataMap.set(pt.key, entry)
+      }
+
+      saveEnvCache()
+      return { dataMap, usedCacheFallback: false, rateLimited: false }
+    },
+    [fetchUsgsQuakes, saveEnvCache]
   )
 
   const persistAdminLocation = useCallback(
@@ -399,7 +481,7 @@ export default function AdminWeatherHazardPanel({
           { onConflict: 'user_id' }
         )
       } catch {
-        // non bloccare UI se il salvataggio remoto ritarda
+        // non bloccare UI
       }
     },
     [supabase, userId]
@@ -422,7 +504,7 @@ export default function AdminWeatherHazardPanel({
             sentAny = true
           }
         } catch {
-          // continua con gli altri alert
+          // continua
         }
       }
 
@@ -529,27 +611,22 @@ export default function AdminWeatherHazardPanel({
   )
 
   const refreshEnvironmentalData = useCallback(
-    async (targetCoords: CoordinatesState | null) => {
+    async (targetCoords: CoordinatesState | null, forceFresh = false) => {
       setCheckingFeed(true)
       setPanelError(null)
+      setFeedNotice(null)
 
       try {
-        const combinedAlerts: HazardAlertItem[] = []
+        const uniquePointsMap = new Map<string, { key: string; lat: number; lng: number }>()
 
+        let adminKey: string | null = null
         if (targetCoords) {
-          const adminEnv = await fetchPointEnvironmental(targetCoords.lat, targetCoords.lng)
-          setWeather(adminEnv.weather)
-          setQuakes(adminEnv.quakes)
-          setQuakeFeedStatus(adminEnv.quakeOk ? 'ok' : 'unavailable')
-
-          const locKey = `admin_${targetCoords.lat.toFixed(1)}_${targetCoords.lng.toFixed(1)}`
-          const adminAlerts = evaluatePointHazards(
-            locKey,
-            `Posizione Admin (${targetCoords.label})`,
-            adminEnv.weather,
-            adminEnv.quakes
-          )
-          combinedAlerts.push(...adminAlerts)
+          adminKey = getCoordCacheKey(targetCoords.lat, targetCoords.lng)
+          uniquePointsMap.set(adminKey, {
+            key: adminKey,
+            lat: targetCoords.lat,
+            lng: targetCoords.lng,
+          })
         }
 
         const uniqueRawPlaces = Array.from(
@@ -561,474 +638,59 @@ export default function AdminWeatherHazardPanel({
           )
         )
 
-        const endpointMap = new Map<string, EndpointEnvReport>()
-
-        await Promise.all(
-          uniqueRawPlaces.map(async (rawPlace) => {
-            const geo = await geocodePlace(rawPlace)
-            if (!geo) return
-            try {
-              const env = await fetchPointEnvironmental(geo.lat, geo.lng)
-              endpointMap.set(rawPlace.toLowerCase(), {
-                rawQuery: rawPlace,
-                resolvedLabel: geo.label,
-                lat: geo.lat,
-                lng: geo.lng,
-                weather: env.weather,
-                quakes: env.quakes,
-              })
-            } catch {
-              // salta endpoint se temporaneamente non raggiungibile
+        const placeGeoMap = new Map<string, { lat: number; lng: number; label: string; key: string }>()
+        for (const rawPlace of uniqueRawPlaces) {
+          const geo = await geocodePlace(rawPlace)
+          if (geo) {
+            const pKey = getCoordCacheKey(geo.lat, geo.lng)
+            placeGeoMap.set(rawPlace.toLowerCase(), { ...geo, key: pKey })
+            if (!uniquePointsMap.has(pKey)) {
+              uniquePointsMap.set(pKey, { key: pKey, lat: geo.lat, lng: geo.lng })
             }
-          })
-        )
-
-        const summaries: MissionHazardSummary[] = activeMissions.map((m) => {
-          const pickupReport = endpointMap.get(m.pickup_point.trim().toLowerCase()) || null
-          const dropoffReport = endpointMap.get(m.dropoff_point.trim().toLowerCase()) || null
-          const mAlerts: HazardAlertItem[] = []
-
-          if (pickupReport) {
-            const pAlerts = evaluatePointHazards(
-              `mission_${m.id}_pickup`,
-              `Missione ${m.client_vip} [PARTENZA: ${m.pickup_point}]`,
-              pickupReport.weather,
-              pickupReport.quakes
-            )
-            mAlerts.push(...pAlerts)
           }
-
-          if (dropoffReport) {
-            const dAlerts = evaluatePointHazards(
-              `mission_${m.id}_dropoff`,
-              `Missione ${m.client_vip} [ARRIVO: ${m.dropoff_point}]`,
-              dropoffReport.weather,
-              dropoffReport.quakes
-            )
-            mAlerts.push(...dAlerts)
-          }
-
-          combinedAlerts.push(...mAlerts)
-
-          return {
-            mission: m,
-            pickupReport,
-            dropoffReport,
-            alerts: mAlerts,
-          }
-        })
-
-        setMissionSummaries(summaries)
-        setActiveAlerts(combinedAlerts)
-        setLastCheckTime(
-          new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-        )
-
-        if (combinedAlerts.length > 0) {
-          await dispatchAlertsToBackend(combinedAlerts)
         }
-      } catch (err: unknown) {
-        const msg =
-          err instanceof Error
-            ? `Errore connessione feed meteo: ${err.message}`
-            : 'Errore aggiornamento meteo/calamita.'
-        setPanelError(msg)
-      } finally {
-        setCheckingFeed(false)
-      }
-    },
-    [
-      activeMissions,
-      fetchPointEnvironmental,
-      geocodePlace,
-      evaluatePointHazards,
-      dispatchAlertsToBackend,
-    ]
-  )
 
-  const detectCurrentPosition = useCallback(() => {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      setPanelError('Geolocalizzazione GPS non supportata dal browser.')
-      refreshEnvironmentalData(null)
-      return
-    }
-
-    setLoadingGps(true)
-    setPanelError(null)
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(5))
-        const lng = Number(pos.coords.longitude.toFixed(5))
-        const label = await resolveLocationName(lat, lng)
-        const updated: CoordinatesState = {
-          lat,
-          lng,
-          label,
-          updatedAt: new Date().toISOString(),
-        }
-        await persistAdminLocation(updated)
-        setLoadingGps(false)
-        await refreshEnvironmentalData(updated)
-      },
-      (geoErr) => {
-        setLoadingGps(false)
-        if (geoErr.code === 1) {
-          setPanelError(
-            'Permesso GPS negato: abilita la posizione nel browser per il monitoraggio locale (monitoraggio tratte comunque attivo).'
-          )
-        } else {
-          setPanelError('Impossibile rilevare la posizione GPS attuale.')
-        }
-        refreshEnvironmentalData(coordsRef.current)
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    )
-  }, [persistAdminLocation, refreshEnvironmentalData])
-
-  // Inizializza una sola volta al mount
-  useEffect(() => {
-    if (!isAdmin || initializedRef.current) return
-    initializedRef.current = true
-
-    const init = async () => {
-      try {
-        const { data } = await supabase
-          .from('admin_hazard_state')
-          .select('latitude, longitude, location_label, updated_at')
-          .eq('user_id', userId)
-          .maybeSingle()
-
-        if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-          const saved: CoordinatesState = {
-            lat: data.latitude,
-            lng: data.longitude,
-            label:
-              data.location_label || `${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`,
-            updatedAt: data.updated_at || new Date().toISOString(),
-          }
-          setCoords(saved)
-          coordsRef.current = saved
-          await refreshEnvironmentalData(saved)
+        const allPoints = Array.from(uniquePointsMap.values())
+        if (allPoints.length === 0) {
+          setCheckingFeed(false)
           return
         }
-      } catch {
-        // usa fallback localStorage
-      }
 
-      if (typeof window !== 'undefined') {
-        const raw = window.localStorage.getItem('ops_admin_coords')
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw) as CoordinatesState
-            if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
-              setCoords(parsed)
-              coordsRef.current = parsed
-              await refreshEnvironmentalData(parsed)
-              return
-            }
-          } catch {
-            // ignora
+        const { dataMap, rateLimited } = await fetchPointsBatch(allPoints, forceFresh)
+
+        if (rateLimited) {
+          setFeedNotice(
+            dataMap.size > 0
+              ? 'Limite richieste feed raggiunto (429): visualizzati dati recenti in cache.'
+              : 'Feed meteo momentaneamente in pausa per limite richieste (429). Riprova tra qualche minuto.'
+          )
+        }
+
+        const combinedAlerts: HazardAlertItem[] = []
+
+        if (targetCoords && adminKey) {
+          const adminEntry = dataMap.get(adminKey)
+          if (adminEntry) {
+            setWeather(adminEntry.weather)
+            setQuakes(adminEntry.quakes)
+            setQuakeFeedStatus(adminEntry.quakeOk ? 'ok' : 'unavailable')
+
+            const adminAlerts = evaluatePointHazards(
+              `admin_${adminKey}`,
+              `Posizione Admin (${targetCoords.label})`,
+              adminEntry.weather,
+              adminEntry.quakes
+            )
+            combinedAlerts.push(...adminAlerts)
           }
         }
-      }
 
-      detectCurrentPosition()
-    }
+        const summaries: MissionHazardSummary[] = activeMissions.map((m) => {
+          const pGeo = placeGeoMap.get(m.pickup_point.trim().toLowerCase())
+          const dGeo = placeGeoMap.get(m.dropoff_point.trim().toLowerCase())
 
-    init()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, userId])
+          const pEntry = pGeo ? dataMap.get(pGeo.key) : undefined
+          const dEntry = dGeo ? dataMap.get(dGeo.key) : undefined
 
-  // Aggiorna solo le tratte se cambiano le missioni attive dopo l'avvio
-  useEffect(() => {
-    if (!isAdmin || !initializedRef.current) return
-    if (!activeMissionsSignature) {
-      setMissionSummaries([])
-      return
-    }
-    refreshEnvironmentalData(coordsRef.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMissionsSignature])
-
-  // Auto-refresh ogni 10 minuti
-  useEffect(() => {
-    if (!isAdmin) return
-    const interval = setInterval(() => {
-      refreshEnvironmentalData(coordsRef.current)
-    }, 10 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [isAdmin, refreshEnvironmentalData])
-
-  const handleTriggerTestAlert = async () => {
-    const locLabel = coords?.label || 'Posizione Admin'
-    const testKey = `test_alert_${Date.now()}`
-    try {
-      const { data, error } = await supabase.rpc('dispatch_admin_hazard_alert', {
-        p_alert_key: testKey,
-        p_severity: 'HIGH',
-        p_title: `Test Sistema Allerta Meteo & Calamita (${locLabel})`,
-        p_details: `Verifica operativa attivata da ${userEmail}. Coordinate: ${
-          coords ? `${coords.lat}, ${coords.lng}` : 'N/D'
-        } | Missioni monitorate: ${activeMissions.length}.`,
-      })
-
-      if (error) {
-        setPanelError(`Errore invio test alert: ${error.message}`)
-        return
-      }
-
-      if (data === 'DISPATCHED') {
-        setStatusBanner('Alert di test inviato su Telegram e registrato in Audit Log.')
-        if (onAuditUpdated) onAuditUpdated()
-        setTimeout(() => setStatusBanner(null), 5000)
-      }
-    } catch (err: unknown) {
-      setPanelError(
-        err instanceof Error ? `Errore rete test alert: ${err.message}` : 'Errore invio test alert.'
-      )
-    }
-  }
-
-  if (!isAdmin) return null
-
-  return (
-    <div className="bg-neutral-900 border-2 border-sky-500/70 rounded-lg p-5 shadow-xl space-y-4">
-      <div className="flex flex-col gap-3 border-b border-sky-500/30 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase shrink-0">
-              SOLO ADMIN
-            </span>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
-              Meteo Locale, Tratte Missioni &amp; Early Warning Calamita
-            </h2>
-            <span
-              className={
-                'px-2 py-0.5 rounded border text-[10px] uppercase font-bold shrink-0 ' +
-                (activeAlerts.length > 0
-                  ? 'bg-red-950 text-red-300 border-red-600'
-                  : 'bg-emerald-950/70 text-emerald-300 border-emerald-700')
-              }
-            >
-              {activeAlerts.length > 0
-                ? `${activeAlerts.length} ALLERTE ATTIVE`
-                : 'NESSUNA CRITICITA'}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={loadingGps}
-              onClick={detectCurrentPosition}
-              className="shrink-0 bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
-            >
-              {loadingGps ? 'Rilevamento GPS...' : 'Aggiorna Posizione GPS'}
-            </button>
-
-            <button
-              type="button"
-              disabled={checkingFeed}
-              onClick={() => refreshEnvironmentalData(coordsRef.current)}
-              className="shrink-0 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
-            >
-              {checkingFeed ? 'Controllo...' : 'Aggiorna Meteo/Sisma'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleTriggerTestAlert}
-              className="shrink-0 bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-[11px] uppercase px-3 py-1.5 rounded transition"
-            >
-              Test Alert Telegram
-            </button>
-          </div>
-        </div>
-
-        <p className="text-xs text-neutral-400">
-          Posizione Admin:{' '}
-          <strong className="text-neutral-200">
-            {coords
-              ? `${coords.label} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
-              : 'In attesa di GPS...'}
-          </strong>
-          {' • '}Missioni attive monitorate:{' '}
-          <strong className="text-sky-300">{activeMissions.length}</strong>
-          {lastCheckTime ? ` • Ultimo check: ${lastCheckTime}` : ''}
-        </p>
-      </div>
-
-      {statusBanner && (
-        <div className="p-2.5 bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs rounded">
-          {statusBanner}
-        </div>
-      )}
-
-      {panelError && (
-        <div className="p-2.5 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded">
-          {panelError}
-        </div>
-      )}
-
-      {activeAlerts.length > 0 && (
-        <div className="space-y-2">
-          {activeAlerts.map((alert) => (
-            <div
-              key={alert.key}
-              className={
-                'p-3 rounded-lg border text-xs space-y-1 ' +
-                (alert.severity === 'CRITICAL'
-                  ? 'bg-red-950/80 border-red-600 text-red-200'
-                  : 'bg-amber-950/70 border-amber-600 text-amber-200')
-              }
-            >
-              <div className="flex items-center justify-between gap-2 font-bold uppercase">
-                <span>
-                  [{alert.severity}] {alert.category} — {alert.title}
-                </span>
-              </div>
-              <div className="text-neutral-200">{alert.details}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {weather ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Condizioni (Tu)</div>
-            <div className="text-neutral-100 font-semibold mt-1">
-              {getWeatherDescription(weather.weatherCode)}
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Temperatura</div>
-            <div className="text-neutral-100 font-bold text-sm mt-1">
-              {weather.temperature}°C{' '}
-              <span className="text-[11px] font-normal text-neutral-400">
-                (perc. {weather.apparentTemperature}°C)
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Pioggia / 12h</div>
-            <div className="text-neutral-100 font-semibold mt-1">
-              {weather.rainNow} mm/h •{' '}
-              <span className="text-sky-300">{weather.sumRain12h.toFixed(1)} mm</span>
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Neve / 12h</div>
-            <div className="text-neutral-100 font-semibold mt-1">
-              {weather.snowfallNow} cm/h •{' '}
-              <span className="text-sky-200">{weather.sumSnow12h.toFixed(1)} cm</span>
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Raffiche Vento</div>
-            <div className="text-neutral-100 font-semibold mt-1">
-              {weather.windGustsNow} km/h{' '}
-              <span className="text-[11px] font-normal text-neutral-400">
-                (max {weather.maxGusts12h})
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">
-              Sismica (100 km / 24h)
-            </div>
-            <div className="text-neutral-100 font-semibold mt-1">
-              {quakeFeedStatus === 'unavailable'
-                ? 'Feed USGS in attesa'
-                : quakes.length > 0
-                ? `M${quakes[0].magnitude.toFixed(1)} (${quakes[0].distanceKm.toFixed(0)} km)`
-                : 'Nessun evento ≥ M3.0'}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="text-xs text-neutral-500 py-1">
-          Clicca &quot;Aggiorna Posizione GPS&quot; per attivare il monitoraggio locale sulla tua posizione.
-        </div>
-      )}
-
-      {missionSummaries.length > 0 && (
-        <div className="border-t border-neutral-800 pt-3 space-y-2">
-          <div className="text-[11px] uppercase tracking-wider font-bold text-sky-300">
-            Monitoraggio Meteo &amp; Sismica — Tratte Missioni Pianificate / In Corso
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            {missionSummaries.map(({ mission, pickupReport, dropoffReport, alerts }) => {
-              const hasAlert = alerts.length > 0
-              const renderEndpointLine = (
-                roleLabel: string,
-                rawPoint: string,
-                rep: EndpointEnvReport | null
-              ) => {
-                if (!rep) {
-                  return (
-                    <div className="text-neutral-500">
-                      <span className="text-neutral-400 font-semibold">{roleLabel}:</span>{' '}
-                      {rawPoint} (coordinate non risolte)
-                    </div>
-                  )
-                }
-                const maxQ =
-                  rep.quakes.length > 0
-                    ? ` | Sisma M${Math.max(...rep.quakes.map((q) => q.magnitude)).toFixed(1)}`
-                    : ''
-                return (
-                  <div className="text-neutral-300">
-                    <span className="text-neutral-400 font-semibold">{roleLabel}:</span>{' '}
-                    <span className="text-neutral-100">{rawPoint}</span>{' '}
-                    <span className="text-neutral-400">
-                      ({rep.weather.temperature}°C, {getWeatherDescription(rep.weather.weatherCode)}
-                      , pioggia 12h: {rep.weather.sumRain12h.toFixed(1)}mm, raffiche:{' '}
-                      {rep.weather.windGustsNow}km/h{maxQ})
-                    </span>
-                  </div>
-                )
-              }
-
-              return (
-                <div
-                  key={mission.id}
-                  className={
-                    'bg-neutral-950 border rounded p-3 space-y-1.5 ' +
-                    (hasAlert ? 'border-red-600/90' : 'border-neutral-800')
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-neutral-100 uppercase">
-                      {mission.client_vip}
-                    </span>
-                    <span
-                      className={
-                        'px-2 py-0.5 rounded text-[10px] font-bold uppercase border ' +
-                        (hasAlert
-                          ? 'bg-red-950 text-red-300 border-red-600'
-                          : 'bg-emerald-950/60 text-emerald-300 border-emerald-800')
-                      }
-                    >
-                      {hasAlert ? `${alerts.length} ALLERTE TRATTA` : 'TRATTA REGOLARE'}
-                    </span>
-                  </div>
-
-                  {renderEndpointLine('Partenza', mission.pickup_point, pickupReport)}
-                  {renderEndpointLine('Arrivo', mission.dropoff_point, dropoffReport)}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+          const pickupReport: EndpointEnvReport | null =
+            p
