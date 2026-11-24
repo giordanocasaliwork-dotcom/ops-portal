@@ -4,6 +4,17 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../utils/supabase/client'
 
+export interface RouteLeg {
+  leg_number: number
+  transport_mode: string
+  origin: string
+  destination: string
+  carrier_code?: string
+  departure_time?: string
+  arrival_time?: string
+  notes?: string
+}
+
 export interface Mission {
   id: string
   created_at: string
@@ -17,6 +28,7 @@ export interface Mission {
   assigned_vehicle_id?: string | null
   status: 'pianificata' | 'in corso' | 'chiusa'
   notes?: string | null
+  route_legs?: RouteLeg[] | null
 }
 
 export type ThreatLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
@@ -53,6 +65,34 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+function formatLegsSummaryLines(legs?: RouteLeg[] | null): string[] {
+  if (!Array.isArray(legs) || legs.length === 0) return []
+  return legs.map((leg, idx) => {
+    const num = leg.leg_number || idx + 1
+    const mode = (leg.transport_mode || 'Trasferimento').toUpperCase()
+    const carrier = leg.carrier_code ? ` [${leg.carrier_code}]` : ''
+    const dep = leg.departure_time
+      ? new Date(leg.departure_time).toLocaleString('it-IT', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : ''
+    const arr = leg.arrival_time
+      ? new Date(leg.arrival_time).toLocaleString('it-IT', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : ''
+    const timing = dep || arr ? ` (${dep || '?'} -> ${arr || '?'})` : ''
+    const note = leg.notes ? ` - ${leg.notes}` : ''
+    return `Tappa ${num} [${mode}]${carrier}: ${leg.origin} -> ${leg.destination}${timing}${note}`
+  })
+}
+
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -63,6 +103,7 @@ interface MissionRiskPanelProps {
   assignedVehicle: string
   operatorLabel: string
   notes?: string | null
+  routeLegs?: RouteLeg[] | null
   risk?: RiskAssessment
   isAdmin: boolean
   isAnalyzingAi: boolean
@@ -84,6 +125,7 @@ function MissionRiskPanel({
   assignedVehicle,
   operatorLabel,
   notes,
+  routeLegs,
   risk,
   isAdmin,
   isAnalyzingAi,
@@ -193,15 +235,17 @@ function MissionRiskPanel({
   }
 
   const handleCopyBriefing = async () => {
+    const legLines = formatLegsSummaryLines(routeLegs)
     const lines = [
       `BRIEFING LOGISTICO & SICUREZZA - ${clientVip.toUpperCase()}`,
       `Finestra: ${formatDate(startTime)} -> ${formatDate(endTime)}`,
-      `Tratta: ${pickupPoint} -> ${dropoffPoint}`,
+      `Tratta Generale: ${pickupPoint} -> ${dropoffPoint}`,
+      legLines.length > 0 ? `\nPIANO DI VIAGGIO MULTIMODALE:\n${legLines.join('\n')}` : null,
       `Rotta Maps: ${buildMapsRouteUrl(pickupPoint, dropoffPoint)}`,
       `Assetto: ${assignedVehicle} | Op: ${operatorLabel}`,
       `Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
-      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE:\n${risk.choke_points}` : null,
-      risk?.safe_havens ? `\nSAFE HAVENS (FFOO):\n${risk.safe_havens}` : null,
+      risk?.choke_points ? `\nCHOKE POINTS & COUNTRY INTELLIGENCE:\n${risk.choke_points}` : null,
+      risk?.safe_havens ? `\nSAFE HAVENS (FFOO / AMBASCIATE):\n${risk.safe_havens}` : null,
       risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
       risk?.evacuation_route ? `\nPIANO B / ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
       risk?.emergency_contacts ? `\nContatti Emergenza: ${risk.emergency_contacts}` : null,
@@ -224,7 +268,7 @@ function MissionRiskPanel({
     <div className="border-t border-neutral-800 pt-4 bg-neutral-900/60 rounded-lg p-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs uppercase tracking-wider font-bold text-emerald-400">
-          Scheda Intelligence - Risk Assessment, Safe Havens &amp; Piano B
+          Scheda Intelligence - Risk Assessment, Country Profile, Safe Havens &amp; Piano B
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
@@ -268,8 +312,8 @@ function MissionRiskPanel({
       </div>
 
       {isAnalyzingAi && (
-        <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded animate-pulse">
-          Valutazione tattica server-side in corso: controllo situazioni partenza/arrivo, choke points autostradali, presidi FFOO (Safe Havens), DEA e Piano B...
+        <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded">
+          Valutazione tattica server-side in corso: analisi tappe multimodali, profilo Paese estero (valuta, vaccini, norme culturali, frontiere), choke points, Safe Havens, DEA e Piano B...
         </div>
       )}
 
@@ -300,39 +344,39 @@ function MissionRiskPanel({
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Contatti Emergenza / Sala Operativa
+                Contatti Emergenza / Ambasciate / Sala Operativa
               </label>
               <input
                 type="text"
                 value={emergencyContacts}
                 onChange={(e) => setEmergencyContacts(e.target.value)}
-                placeholder="Es. NUE 112 - CCISS 1518 - Centrale Operativa"
+                placeholder="Es. NUE 112 - Ambasciata d'Italia - Unita di Crisi +39 06 36225"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Choke Points &amp; Situazione Partenza / Arrivo
+                Choke Points, Tappe &amp; Country Intelligence
               </label>
               <textarea
                 rows={4}
                 value={chokePoints}
                 onChange={(e) => setChokePoints(e.target.value)}
-                placeholder="Svincoli congestionati, ZTL, cantieri, aree esposte"
+                placeholder="Analisi tappe, valichi/terminal, profilo Paese (valuta, vaccini, norme), choke points"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Safe Havens &amp; Presidi FFOO (uno per riga per link Maps)
+                Safe Havens, Presidi FFOO &amp; Ambasciate (uno per riga per link Maps)
               </label>
               <textarea
                 rows={4}
                 value={safeHavens}
                 onChange={(e) => setSafeHavens(e.target.value)}
-                placeholder="Es. Stazione Carabinieri Roma EUR"
+                placeholder="Es. Ambasciata d'Italia Riyadh"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
@@ -345,7 +389,7 @@ function MissionRiskPanel({
                 rows={3}
                 value={medicalFacilities}
                 onChange={(e) => setMedicalFacilities(e.target.value)}
-                placeholder="Es. Ospedale Sant'Eugenio Roma"
+                placeholder="Es. King Faisal Specialist Hospital Riyadh"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
@@ -358,7 +402,7 @@ function MissionRiskPanel({
                 rows={3}
                 value={evacuationRoute}
                 onChange={(e) => setEvacuationRoute(e.target.value)}
-                placeholder="Percorso secondario e svincoli di deviazione in caso di blocco asse principale"
+                placeholder="Percorso secondario, riprotezione voli/treni e vie di esfiltrazione"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
               />
             </div>
@@ -387,7 +431,7 @@ function MissionRiskPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
             <div className="text-[10px] uppercase text-yellow-300 font-bold mb-1">
-              Choke Points &amp; Situazione Partenza / Arrivo (Percorso A)
+              Country Intelligence, Analisi Tappe &amp; Choke Points (Percorso A)
             </div>
             <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
               {risk.choke_points || 'Nessuna criticita segnalata.'}
@@ -396,7 +440,7 @@ function MissionRiskPanel({
 
           <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
             <div className="text-[10px] uppercase text-emerald-400 font-bold mb-1.5">
-              Safe Havens &amp; Presidi FFOO Strategici
+              Safe Havens, Presidi FFOO &amp; Ambasciate
             </div>
             {safeHavenList.length > 0 ? (
               <div className="space-y-1.5">
@@ -459,7 +503,7 @@ function MissionRiskPanel({
                 Contatti Emergenza:
               </span>
               <span className="text-neutral-200">
-                {risk.emergency_contacts || 'NUE 112 - CCISS 1518'}
+                {risk.emergency_contacts || 'NUE 112 - Unita di Crisi Farnesina +39 06 36225'}
               </span>
             </div>
             {risk.updated_at && (
@@ -471,7 +515,7 @@ function MissionRiskPanel({
         </div>
       ) : (
         <div className="text-xs text-neutral-500 py-2">
-          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI Real-Time&quot; per elaborare il percorso.
+          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI Real-Time&quot; per elaborare il percorso e tutte le tappe.
         </div>
       )}
     </div>
@@ -585,10 +629,12 @@ function ExecutiveBriefPanel({
   }
 
   const handleCopyExecutiveBrief = async () => {
+    const legLines = formatLegsSummaryLines(mission.route_legs)
     const lines = [
       `EXECUTIVE BRIEFING - ${mission.client_vip.toUpperCase()}`,
       `Orario: ${formatDate(mission.start_time)} -> ${formatDate(mission.end_time)}`,
       `Spostamento: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      legLines.length > 0 ? `Tappe Multimodali:\n${legLines.join('\n')}` : null,
       `Assetto: ${mission.assigned_vehicle} | Ref: ${operatorLabel}`,
       brief?.counterpart_name
         ? `Interlocutore: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
@@ -599,7 +645,7 @@ function ExecutiveBriefPanel({
       brief?.hospitality_details ? `Ospitalita / Hotel: ${brief.hospitality_details}` : null,
       brief?.confidential_notes ? `Note Riservate: ${brief.confidential_notes}` : null,
       risk?.threat_level ? `Livello Rischio Area: ${risk.threat_level}` : null,
-      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE:\n${risk.choke_points}` : null,
+      risk?.choke_points ? `\nCHOKE POINTS & COUNTRY INTELLIGENCE:\n${risk.choke_points}` : null,
       risk?.safe_havens ? `\nSAFE HAVENS (FFOO):\n${risk.safe_havens}` : null,
       risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
       risk?.evacuation_route ? `\nPIANO B / ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
@@ -864,6 +910,17 @@ interface SosAlertRecord {
   accuracy: number | null
 }
 
+interface DraftLegItem {
+  id: string
+  transport_mode: string
+  origin: string
+  destination: string
+  carrier_code: string
+  departure_time: string
+  arrival_time: string
+  notes: string
+}
+
 interface MissionBoardProps {
   initialMissions: Mission[]
   isAdmin: boolean
@@ -921,6 +978,7 @@ export default function MissionBoard({
   const [assignedVehicleId, setAssignedVehicleId] = useState('')
   const [manualVehicle, setManualVehicle] = useState('')
   const [notes, setNotes] = useState('')
+  const [draftLegs, setDraftLegs] = useState<DraftLegItem[]>([])
 
   const [vehCallsign, setVehCallsign] = useState('')
   const [vehModel, setVehModel] = useState('')
@@ -972,10 +1030,47 @@ export default function MissionBoard({
     [operators]
   )
 
+  const handleAddDraftLeg = () => {
+    const previousEnd =
+      draftLegs.length > 0
+        ? draftLegs[draftLegs.length - 1].destination
+        : pickupPoint.trim()
+
+    setDraftLegs((prev) => [
+      ...prev,
+      {
+        id: `leg_${Date.now()}_${prev.length + 1}`,
+        transport_mode: prev.length === 0 ? 'Auto / NCC' : 'Volo Commerciale',
+        origin: previousEnd,
+        destination: '',
+        carrier_code: '',
+        departure_time: '',
+        arrival_time: '',
+        notes: '',
+      },
+    ])
+  }
+
+  const handleUpdateDraftLeg = (
+    id: string,
+    field: keyof Omit<DraftLegItem, 'id'>,
+    value: string
+  ) => {
+    setDraftLegs((prev) =>
+      prev.map((leg) => (leg.id === id ? { ...leg, [field]: value } : leg))
+    )
+  }
+
+  const handleRemoveDraftLeg = (id: string) => {
+    setDraftLegs((prev) => prev.filter((leg) => leg.id !== id))
+  }
+
   const handleDownloadMissionIcs = (mission: Mission) => {
     const risk = riskList.find((r) => r.mission_id === mission.id)
+    const legLines = formatLegsSummaryLines(mission.route_legs)
     const descParts = [
       `Tratta: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      legLines.length > 0 ? `Tappe Multimodali:\n${legLines.join('\n')}` : null,
       `Assetto: ${mission.assigned_vehicle}`,
       `Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
       risk?.threat_level ? `Livello Rischio: ${risk.threat_level}` : null,
@@ -1014,12 +1109,14 @@ export default function MissionBoard({
   const buildMissionFullText = (mission: Mission) => {
     const risk = riskList.find((r) => r.mission_id === mission.id)
     const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
+    const legLines = formatLegsSummaryLines(mission.route_legs)
 
     const lines = [
       `SCHEDA MISSIONE & ANALISI TATTICA - ${mission.client_vip.toUpperCase()}`,
       `Stato: ${mission.status.toUpperCase()} | Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
       `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
-      `Tratta Principale (Percorso A): ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      `Tratta Generale: ${mission.pickup_point} -> ${mission.dropoff_point}`,
+      legLines.length > 0 ? `\nPIANO DI VIAGGIO MULTIMODALE:\n${legLines.join('\n')}` : null,
       `Rotta Maps: ${buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}`,
       `Assetto: ${mission.assigned_vehicle} | Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
       mission.notes ? `Note Logistica: ${mission.notes}` : null,
@@ -1031,7 +1128,7 @@ export default function MissionBoard({
       brief?.hospitality_details ? `Ospitalita / Hotel: ${brief.hospitality_details}` : null,
       brief?.talking_points ? `Talking Points:\n${brief.talking_points}` : null,
       brief?.confidential_notes ? `Note Riservate: ${brief.confidential_notes}` : null,
-      risk?.choke_points ? `\nCHOKE POINTS & SITUAZIONE PARTENZA / ARRIVO:\n${risk.choke_points}` : null,
+      risk?.choke_points ? `\nCOUNTRY INTELLIGENCE & CHOKE POINTS:\n${risk.choke_points}` : null,
       risk?.safe_havens ? `\nSAFE HAVENS & PRESIDI FFOO:\n${risk.safe_havens}` : null,
       risk?.medical_facilities ? `\nSTRUTTURE SANITARIE / DEA:\n${risk.medical_facilities}` : null,
       risk?.evacuation_route ? `\nPIANO B — ITINERARIO ALTERNATIVO & ESFILTRAZIONE:\n${risk.evacuation_route}` : null,
@@ -1060,6 +1157,16 @@ export default function MissionBoard({
 
     const risk = riskList.find((r) => r.mission_id === mission.id)
     const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
+    const legLines = formatLegsSummaryLines(mission.route_legs)
+
+    const legsHtml =
+      legLines.length > 0
+        ? `
+        <div class="section">
+          <div class="section-title">Piano di Viaggio &amp; Tappe Multimodali</div>
+          <div class="box">${legLines.map((l) => escapeHtml(l)).join('<br/>')}</div>
+        </div>`
+        : ''
 
     const execHtml =
       isAdmin && brief
@@ -1112,20 +1219,21 @@ export default function MissionBoard({
         <div class="meta-grid">
           <div><strong>Finestra Oraria:</strong><br/>${escapeHtml(formatDateTime(mission.start_time))} &rarr; ${escapeHtml(formatDateTime(mission.end_time))}</div>
           <div><strong>Assetto &amp; Operatore:</strong><br/>${escapeHtml(mission.assigned_vehicle)} | ${escapeHtml(formatOperatorLabel(mission.assigned_operator_id))}</div>
-          <div style="grid-column: span 2;"><strong>Itinerario Principale (Percorso A):</strong><br/>${escapeHtml(mission.pickup_point)} &rarr; ${escapeHtml(mission.dropoff_point)}</div>
+          <div style="grid-column: span 2;"><strong>Itinerario Generale:</strong><br/>${escapeHtml(mission.pickup_point)} &rarr; ${escapeHtml(mission.dropoff_point)}</div>
           ${mission.notes ? `<div style="grid-column: span 2;"><strong>Note Logistica:</strong> ${escapeHtml(mission.notes)}</div>` : ''}
         </div>
 
+        ${legsHtml}
         ${execHtml}
 
         <div class="section">
-          <div class="section-title">Choke Points &amp; Situazione Partenza / Arrivo (Percorso A)</div>
+          <div class="section-title">Country Intelligence, Analisi Tappe &amp; Choke Points</div>
           <div class="box">${risk?.choke_points ? escapeHtml(risk.choke_points) : 'Nessuna analisi Choke Points registrata.'}</div>
         </div>
 
         <div class="two-col">
           <div class="section">
-            <div class="section-title">Safe Havens &amp; Presidi FFOO Strategici</div>
+            <div class="section-title">Safe Havens, Presidi FFOO &amp; Ambasciate</div>
             <div class="box">${risk?.safe_havens ? escapeHtml(risk.safe_havens) : 'Nessun Safe Haven censito.'}</div>
           </div>
           <div class="section">
@@ -1141,7 +1249,7 @@ export default function MissionBoard({
 
         <div class="section">
           <div class="section-title">Contatti Emergenza &amp; Sala Operativa</div>
-          <div class="box">${risk?.emergency_contacts ? escapeHtml(risk.emergency_contacts) : 'NUE 112 - CCISS 1518'}</div>
+          <div class="box">${risk?.emergency_contacts ? escapeHtml(risk.emergency_contacts) : 'NUE 112 - Unita di Crisi Farnesina +39 06 36225'}</div>
         </div>
 
         <div class="footer">Documento generato da Ops Portal il ${new Date().toLocaleString('it-IT')}</div>
@@ -1288,6 +1396,7 @@ export default function MissionBoard({
       targetMissions.forEach((m, index) => {
         const risk = riskList.find((r) => r.mission_id === m.id)
         const brief = briefList.find((b) => b.mission_id === m.id)
+        const legLines = formatLegsSummaryLines(m.route_legs)
         const startHour = new Date(m.start_time).toLocaleTimeString('it-IT', {
           hour: '2-digit',
           minute: '2-digit',
@@ -1298,7 +1407,10 @@ export default function MissionBoard({
         })
 
         lines.push(`${index + 1}. [${startHour} - ${endHour}] ${m.client_vip.toUpperCase()}`)
-        lines.push(`   Tratta (Percorso A): ${m.pickup_point} -> ${m.dropoff_point}`)
+        lines.push(`   Tratta Generale: ${m.pickup_point} -> ${m.dropoff_point}`)
+        if (legLines.length > 0) {
+          lines.push(`   Tappe Multimodali:\n   ${legLines.join('\n   ')}`)
+        }
         lines.push(`   Assetto: ${m.assigned_vehicle} | Op: ${formatOperatorLabel(m.assigned_operator_id)}`)
         if (brief?.counterpart_name) {
           lines.push(
@@ -1318,7 +1430,7 @@ export default function MissionBoard({
           lines.push(`   Livello Rischio: ${risk.threat_level}`)
         }
         if (risk?.choke_points) {
-          lines.push(`   Choke Points & Situazione:\n${risk.choke_points}`)
+          lines.push(`   Country Intelligence & Choke Points:\n${risk.choke_points}`)
         }
         if (risk?.safe_havens) {
           lines.push(`   Safe Havens (FFOO):\n${risk.safe_havens}`)
@@ -1376,6 +1488,7 @@ export default function MissionBoard({
             .map((m, idx) => {
               const risk = riskList.find((r) => r.mission_id === m.id)
               const brief = briefList.find((b) => b.mission_id === m.id)
+              const legLines = formatLegsSummaryLines(m.route_legs)
               const startHour = new Date(m.start_time).toLocaleTimeString('it-IT', {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -1395,12 +1508,13 @@ export default function MissionBoard({
                     <div class="risk">RISCHIO: ${escapeHtml(risk?.threat_level || 'N/D')}</div>
                   </div>
                   <div class="meta">
-                    <div><strong>Tratta (Percorso A):</strong> ${escapeHtml(m.pickup_point)} &rarr; ${escapeHtml(m.dropoff_point)}</div>
+                    <div><strong>Tratta Generale:</strong> ${escapeHtml(m.pickup_point)} &rarr; ${escapeHtml(m.dropoff_point)}</div>
+                    ${legLines.length > 0 ? `<div><strong>Tappe Multimodali:</strong><br/>${legLines.map((l) => escapeHtml(l)).join('<br/>')}</div>` : ''}
                     <div><strong>Assetto:</strong> ${escapeHtml(m.assigned_vehicle)} | <strong>Operatore:</strong> ${escapeHtml(formatOperatorLabel(m.assigned_operator_id))}</div>
                     ${brief?.counterpart_name ? `<div><strong>Interlocutore:</strong> ${escapeHtml(brief.counterpart_name)}</div>` : ''}
                     ${brief?.travel_booking_ref ? `<div><strong>Travel/PNR:</strong> ${escapeHtml(brief.travel_booking_ref)}</div>` : ''}
                   </div>
-                  ${risk?.choke_points ? `<div class="sub"><strong>Choke Points &amp; Situazione:</strong><br/>${escapeHtml(risk.choke_points)}</div>` : ''}
+                  ${risk?.choke_points ? `<div class="sub"><strong>Country Intelligence &amp; Choke Points:</strong><br/>${escapeHtml(risk.choke_points)}</div>` : ''}
                   ${risk?.safe_havens ? `<div class="sub"><strong>Safe Havens (FFOO):</strong><br/>${escapeHtml(risk.safe_havens)}</div>` : ''}
                   ${risk?.medical_facilities ? `<div class="sub"><strong>Strutture Sanitarie / DEA:</strong><br/>${escapeHtml(risk.medical_facilities)}</div>` : ''}
                   ${risk?.evacuation_route ? `<div class="sub-planb"><strong>Piano B / Esfiltrazione:</strong><br/>${escapeHtml(risk.evacuation_route)}</div>` : ''}
@@ -1674,6 +1788,19 @@ export default function MissionBoard({
         throw new Error('Seleziona un mezzo dalla flotta o inserisci una descrizione.')
       }
 
+      const normalizedLegs: RouteLeg[] = draftLegs
+        .filter((l) => l.origin.trim() && l.destination.trim())
+        .map((l, idx) => ({
+          leg_number: idx + 1,
+          transport_mode: l.transport_mode.trim() || 'Trasferimento',
+          origin: l.origin.trim(),
+          destination: l.destination.trim(),
+          carrier_code: l.carrier_code.trim() || undefined,
+          departure_time: l.departure_time ? new Date(l.departure_time).toISOString() : undefined,
+          arrival_time: l.arrival_time ? new Date(l.arrival_time).toISOString() : undefined,
+          notes: l.notes.trim() || undefined,
+        }))
+
       const { data, error: insertError } = await supabase
         .from('missions')
         .insert([
@@ -1688,6 +1815,7 @@ export default function MissionBoard({
             assigned_operator_id: assignedOperatorId || null,
             status: 'pianificata',
             notes: notes.trim() || null,
+            route_legs: normalizedLegs,
             created_by: userId,
           },
         ])
@@ -1699,7 +1827,7 @@ export default function MissionBoard({
       await supabase.from('audit_logs').insert([
         {
           user_email: userEmail,
-          action: `MISSION_CREATE (${clientVip})`,
+          action: `MISSION_CREATE (${clientVip}${normalizedLegs.length > 0 ? ` - ${normalizedLegs.length} tappe` : ''})`,
           status: 'SUCCESS',
         },
       ])
@@ -1718,6 +1846,7 @@ export default function MissionBoard({
       setAssignedVehicleId('')
       setManualVehicle('')
       setNotes('')
+      setDraftLegs([])
       setShowForm(false)
       if (onAuditUpdated) onAuditUpdated()
       router.refresh()
@@ -1856,7 +1985,7 @@ export default function MissionBoard({
             Agenda Direzionale, Flotta &amp; Risk Assessment
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Pianificazione movimenti, analisi AI percorsi real-time, safe havens, choke points e Piano B
+            Pianificazione movimenti multimodali, analisi AI internazionale real-time, safe havens e Piano B
           </p>
         </div>
 
@@ -1952,7 +2081,7 @@ export default function MissionBoard({
                 Morning Briefing Direzione - Riepilogo Esecutivo Completo
               </div>
               <p className="text-[11px] text-neutral-400">
-                Include appuntamenti, movimentazioni, Choke Points, Safe Havens, Piano B e deleghe urgenti
+                Include appuntamenti, movimentazioni multimodali, Country Intelligence, Safe Havens e Piano B
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2090,7 +2219,7 @@ export default function MissionBoard({
           className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4"
         >
           <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
-            Nuovo Ordine di Servizio / Trasferta
+            Nuovo Ordine di Servizio / Trasferta Multimodale
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2129,7 +2258,7 @@ export default function MissionBoard({
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Mezzo Assegnato (Flotta) *
+                Assetto / Mezzo Principale *
               </label>
               {vehicles.length > 0 ? (
                 <select
@@ -2151,7 +2280,7 @@ export default function MissionBoard({
                   required
                   value={manualVehicle}
                   onChange={(e) => setManualVehicle(e.target.value)}
-                  placeholder="Modello / Targa / Callsign (oppure censisci in Flotta)"
+                  placeholder="Modello / Targa / Callsign / Multimodale"
                   className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
                 />
               )}
@@ -2187,42 +2316,199 @@ export default function MissionBoard({
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Punto di Prelievo (Pick-up) *
+                Origine Generale / Partenza (Pick-up) *
               </label>
               <input
                 type="text"
                 required
                 value={pickupPoint}
                 onChange={(e) => setPickupPoint(e.target.value)}
-                placeholder="Indirizzo, terminal o citta di partenza (es. Roma EUR)"
+                placeholder="Es. Roma EUR / Roma Termini"
                 className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
               />
             </div>
 
             <div>
               <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Punto di Rilascio / Sede Incontro *
+                Destinazione Finale (Drop-off) *
               </label>
               <input
                 type="text"
                 required
                 value={dropoffPoint}
                 onChange={(e) => setDropoffPoint(e.target.value)}
-                placeholder="Destinazione o punto di rilascio (es. Milano Centro)"
+                placeholder="Es. Riyadh, Arabia Saudita"
                 className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
               />
             </div>
           </div>
 
+          <div className="bg-neutral-900/90 border border-sky-800/70 rounded-lg p-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] uppercase font-bold text-sky-300">
+                  Piano di Viaggio &amp; Tappe Multimodali (Auto, Treno, Volo, Scali)
+                </div>
+                <p className="text-[11px] text-neutral-400">
+                  Aggiungi ogni segmento del viaggio (es. Roma &rarr; Parigi in auto/treno, Parigi CDG &rarr; Riyadh RUH in volo) per l&apos;analisi AI completa
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddDraftLeg}
+                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1.5 rounded transition shrink-0"
+              >
+                + Aggiungi Tappa / Mezzo
+              </button>
+            </div>
+
+            {draftLegs.length > 0 ? (
+              <div className="space-y-3">
+                {draftLegs.map((leg, idx) => (
+                  <div
+                    key={leg.id}
+                    className="bg-neutral-950 border border-neutral-800 rounded p-3 space-y-2.5 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase text-sky-400">
+                        Tappa #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDraftLeg(leg.id)}
+                        className="text-[11px] uppercase text-red-400 hover:text-red-300"
+                      >
+                        Rimuovi Tappa
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Modalita Trasporto *
+                        </label>
+                        <select
+                          value={leg.transport_mode}
+                          onChange={(e) =>
+                            handleUpdateDraftLeg(leg.id, 'transport_mode', e.target.value)
+                          }
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        >
+                          <option value="Auto / NCC">Auto / NCC</option>
+                          <option value="Auto Blindata">Auto Blindata</option>
+                          <option value="Treno Alta Velocita">Treno Alta Velocita</option>
+                          <option value="Volo Commerciale">Volo Commerciale</option>
+                          <option value="Jet Privato / FBO">Jet Privato / FBO</option>
+                          <option value="Elicottero">Elicottero</option>
+                          <option value="Traghetto / Nave">Traghetto / Nave</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Partenza Tappa *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={leg.origin}
+                          onChange={(e) => handleUpdateDraftLeg(leg.id, 'origin', e.target.value)}
+                          placeholder="Es. Roma Termini / Parigi CDG T2"
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Arrivo Tappa *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={leg.destination}
+                          onChange={(e) =>
+                            handleUpdateDraftLeg(leg.id, 'destination', e.target.value)
+                          }
+                          placeholder="Es. Parigi Gare de Lyon / Riyadh RUH"
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Vettore / Volo / Treno / Targa
+                        </label>
+                        <input
+                          type="text"
+                          value={leg.carrier_code}
+                          onChange={(e) =>
+                            handleUpdateDraftLeg(leg.id, 'carrier_code', e.target.value)
+                          }
+                          placeholder="Es. Volo SV126 / TGV 9240"
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Partenza Tappa (Opz.)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={leg.departure_time}
+                          onChange={(e) =>
+                            handleUpdateDraftLeg(leg.id, 'departure_time', e.target.value)
+                          }
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Arrivo Tappa (Opz.)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={leg.arrival_time}
+                          onChange={(e) =>
+                            handleUpdateDraftLeg(leg.id, 'arrival_time', e.target.value)
+                          }
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                          Dettagli Operativi Tappa (Terminal, Gate, Dogana, Coincidenza)
+                        </label>
+                        <input
+                          type="text"
+                          value={leg.notes}
+                          onChange={(e) => handleUpdateDraftLeg(leg.id, 'notes', e.target.value)}
+                          placeholder="Es. Scalo 2h30m, ritiro bagagli, accoglienza driver VIP fuori dogana"
+                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[11px] text-neutral-500">
+                Nessuna tappa intermedia aggiunta: verra analizzata la tratta diretta tra Partenza e Destinazione Finale.
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-              Note Logistica (Visibili anche all&apos;operatore sul campo)
+              Note Logistica Generali (Visibili anche all&apos;operatore sul campo)
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Accesso carraio, pass ZTL, tempi di attesa (per note riservate usa Dossier & Travel)"
+              placeholder="Accesso carraio, pass ZTL, tempi di attesa, dotazioni"
               className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
             />
           </div>
@@ -2236,7 +2522,7 @@ export default function MissionBoard({
                 className="accent-sky-400 w-4 h-4"
               />
               <span>
-                Elabora automaticamente Valutazione Rischio AI Real-Time (Safe Havens, Choke Points &amp; Piano B)
+                Elabora automaticamente Valutazione Rischio AI Real-Time (Tappe, Profilo Paese, Safe Havens &amp; Piano B)
               </span>
             </label>
 
@@ -2267,6 +2553,7 @@ export default function MissionBoard({
             const isSendingSos = sendingSosId === mission.id
             const sosAlert = sentSosAlerts[mission.id]
             const isAnalyzingThis = analyzingMissionId === mission.id
+            const missionLegs = Array.isArray(mission.route_legs) ? mission.route_legs : []
 
             return (
               <div
@@ -2299,6 +2586,11 @@ export default function MissionBoard({
                       >
                         {risk ? `Rischio: ${risk.threat_level}` : 'Rischio: N/D'}
                       </span>
+                      {missionLegs.length > 0 && (
+                        <span className="px-2 py-0.5 rounded border text-[10px] uppercase font-bold bg-sky-950/70 text-sky-300 border-sky-700">
+                          {missionLegs.length} Tappe Multimodali
+                        </span>
+                      )}
                       {isAdmin && brief && (
                         <span className="px-2 py-0.5 rounded border text-[10px] uppercase font-bold bg-amber-950/70 text-amber-300 border-amber-700">
                           Dossier OK
@@ -2357,6 +2649,32 @@ export default function MissionBoard({
                         Rotta Maps ↗
                       </a>
                     </div>
+
+                    {missionLegs.length > 0 && (
+                      <div className="mt-1.5 bg-neutral-900/90 border border-sky-900/60 rounded p-2.5 space-y-1 text-[11px]">
+                        <div className="text-[10px] uppercase font-bold text-sky-300">
+                          Dettaglio Tappe &amp; Mezzi:
+                        </div>
+                        {missionLegs.map((leg, idx) => (
+                          <div key={idx} className="text-neutral-300 flex flex-wrap items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px] font-bold uppercase">
+                              {leg.leg_number || idx + 1}. {leg.transport_mode}
+                            </span>
+                            {leg.carrier_code && (
+                              <span className="text-amber-300 font-semibold">
+                                [{leg.carrier_code}]
+                              </span>
+                            )}
+                            <span>
+                              {leg.origin} &rarr; {leg.destination}
+                            </span>
+                            {leg.notes && (
+                              <span className="text-neutral-400 italic">({leg.notes})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {isAdmin && brief?.counterpart_name && (
                       <div className="text-[11px] text-amber-300/90">
@@ -2589,6 +2907,7 @@ export default function MissionBoard({
                     operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
                     pickupPoint={mission.pickup_point}
                     risk={risk}
+                    routeLegs={mission.route_legs}
                     startTime={mission.start_time}
                     userEmail={userEmail}
                     userId={userId}
