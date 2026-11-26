@@ -594,30 +594,43 @@ export default function DashboardPage() {
                       Appuntamenti &amp; Meeting Oggi ({todayAppointments.length})
                     </div>
                     {todayAppointments.length > 0 ? (
-                      todayAppointments.map((appt) => (
-                        <div
-                          key={appt.id}
-                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-amber-200">
-                              {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
-                            </span>
-                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
-                              {appt.status}
-                            </span>
-                          </div>
-                          <div className="font-semibold text-neutral-100">{appt.title}</div>
-                          {appt.location && (
-                            <div className="text-neutral-400 text-[11px]">Luogo: {appt.location}</div>
-                          )}
-                          {appt.participants && (
-                            <div className="text-neutral-400 text-[11px]">
-                              Partecipanti: {appt.participants}
+                      todayAppointments.map((appt) => {
+                        const apptFields = appt as unknown as Record<string, string | null | undefined>
+                        const locationVal =
+                          apptFields.location ||
+                          apptFields.location_or_link ||
+                          apptFields.venue ||
+                          apptFields.place
+                        const participantsVal =
+                          apptFields.participants ||
+                          apptFields.attendees ||
+                          apptFields.counterpart
+
+                        return (
+                          <div
+                            key={appt.id}
+                            className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-amber-200">
+                                {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
+                              </span>
+                              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
+                                {appt.status}
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      ))
+                            <div className="font-semibold text-neutral-100">{appt.title}</div>
+                            {locationVal && (
+                              <div className="text-neutral-400 text-[11px]">Luogo: {locationVal}</div>
+                            )}
+                            {participantsVal && (
+                              <div className="text-neutral-400 text-[11px]">
+                                Partecipanti: {participantsVal}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
                     ) : (
                       <div className="text-neutral-500 text-[11px]">
                         Nessun meeting in agenda per oggi.
