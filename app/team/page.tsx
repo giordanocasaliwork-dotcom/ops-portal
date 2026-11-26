@@ -51,7 +51,10 @@ export default function TeamPage() {
 
   useEffect(() => {
     const initTeam = async () => {
-      const { data: { user }, error: authErr } = await supabase.auth.getUser()
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabase.auth.getUser()
       if (authErr || !user) {
         router.replace('/login')
         return
@@ -209,41 +212,41 @@ export default function TeamPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
+      <div className="min-h-screen bg-neutral-950 text-neutral-300 p-6 font-sans text-sm">
         Verifica clearance amministratore...
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 shadow-xl">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-3.5 sm:p-6 md:p-8 font-sans antialiased">
+      <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
+        <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-amber-500 rounded-xl p-4 sm:p-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
             <div>
-              <h1 className="text-lg font-bold uppercase tracking-widest text-neutral-100">
+              <h1 className="text-lg sm:text-2xl font-bold uppercase tracking-wide text-white">
                 Gestione Team, Clearance &amp; Ruoli
               </h1>
-              <p className="text-xs text-neutral-400 mt-1">
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
                 Approvazione registrazioni, assegnazione Callsign, ruoli e rimozione profili
               </p>
             </div>
             <button
               type="button"
               onClick={() => router.push('/dashboard')}
-              className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
+              className="min-h-[40px] self-start sm:self-auto bg-neutral-950 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs sm:text-sm uppercase tracking-wider font-semibold px-4 py-2 rounded-lg transition"
             >
               &larr; Torna alla Dashboard
             </button>
           </div>
 
           {error && (
-            <div className="mt-4 p-3 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded">
+            <div className="mt-4 p-3.5 bg-red-950/60 border border-red-800 text-red-200 text-sm rounded-lg">
               {error}
             </div>
           )}
 
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 space-y-3.5">
             {members.map((member) => {
               const isMe = member.id === adminId
               const roleLower = String(member.role || 'operator').toLowerCase()
@@ -254,48 +257,54 @@ export default function TeamPage() {
                 <div
                   key={member.id}
                   className={
-                    'bg-neutral-950 border rounded-lg p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-xs ' +
-                    (!member.is_active ? 'border-amber-700/80' : 'border-neutral-800')
+                    'bg-neutral-950 border rounded-xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-sm ' +
+                    (!member.is_active ? 'border-amber-600/80' : 'border-neutral-800')
                   }
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={
-                          'px-2 py-0.5 rounded border text-[10px] font-bold uppercase ' +
+                          'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
                           (member.is_active
                             ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700'
-                            : 'bg-amber-950/80 text-amber-300 border-amber-700')
+                            : 'bg-amber-950/80 text-amber-300 border-amber-600')
                         }
                       >
-                        {member.is_active ? 'ATTIVO' : 'IN ATTESA APPROVAZIONE'}
+                        {member.is_active ? 'Attivo' : 'In Attesa Approvazione'}
                       </span>
 
                       <span
                         className={
-                          'px-2 py-0.5 rounded border text-[10px] font-bold uppercase ' +
+                          'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
                           (roleLower === 'admin'
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                            ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700'
                             : roleLower === 'executive'
-                            ? 'bg-amber-950 text-amber-300 border-amber-700'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
                             : 'bg-neutral-900 text-neutral-300 border-neutral-700')
                         }
                       >
-                        {roleLower === 'executive' ? 'EXECUTIVE • DIREZIONE' : roleLower}
+                        {roleLower === 'executive' ? 'Executive • Direzione' : roleLower}
                       </span>
 
-                      <span className="text-sm font-bold text-neutral-100">
-                        {member.full_name || member.email}
-                      </span>
+                      {member.callsign && (
+                        <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 font-mono text-xs font-bold text-emerald-300">
+                          {member.callsign}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="text-neutral-400">
-                      Email: <span className="text-neutral-200">{member.email}</span>
+                    <div className="text-base sm:text-lg font-bold text-white">
+                      {member.full_name || member.email}
+                    </div>
+
+                    <div className="text-neutral-300 text-sm break-all">
+                      <span className="text-neutral-400">Email:</span> {member.email}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
-                    <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="text"
                         value={callsignDrafts[member.id] ?? ''}
@@ -306,12 +315,12 @@ export default function TeamPage() {
                           }))
                         }
                         placeholder="Callsign"
-                        className="w-24 bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-xs text-neutral-200 uppercase"
+                        className="min-h-[40px] w-28 bg-neutral-900 border border-neutral-700 focus:border-amber-400 focus:outline-none rounded-lg px-3 py-2 font-mono text-base sm:text-sm text-white uppercase"
                       />
                       <button
                         type="button"
                         onClick={() => handleSaveCallsign(member)}
-                        className="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 text-[11px] uppercase px-2 py-1.5 rounded"
+                        className="min-h-[40px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-bold uppercase px-3.5 py-2 rounded-lg transition"
                       >
                         Salva
                       </button>
@@ -322,7 +331,7 @@ export default function TeamPage() {
                       disabled={isMe}
                       value={roleLower}
                       onChange={(e) => handleRoleChange(member, e.target.value)}
-                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 disabled:opacity-50"
+                      className="min-h-[40px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-base sm:text-sm font-semibold rounded-lg px-3 py-2 disabled:opacity-50"
                     >
                       <option value="operator">Operator (Campo)</option>
                       <option value="executive">Executive (Direzione)</option>
@@ -335,10 +344,10 @@ export default function TeamPage() {
                           type="button"
                           onClick={() => handleToggleActive(member)}
                           className={
-                            'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
+                            'min-h-[40px] text-xs sm:text-sm uppercase font-bold px-3.5 py-2 rounded-lg border transition ' +
                             (member.is_active
-                              ? 'bg-neutral-900 hover:bg-amber-950/70 text-amber-300 border-amber-800/80'
-                              : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 border-emerald-400')
+                              ? 'bg-neutral-900 hover:bg-amber-950/70 text-amber-300 border-amber-700/80'
+                              : 'bg-emerald-400 hover:bg-emerald-300 text-neutral-950 border-emerald-400')
                           }
                         >
                           {member.is_active ? 'Sospendi' : 'Approva Accesso'}
@@ -350,7 +359,7 @@ export default function TeamPage() {
                           onClick={() => handleDeleteUser(member)}
                           title="Doppio clic rapido per eliminare definitivamente il profilo"
                           className={
-                            'text-xs uppercase font-bold px-3 py-1.5 rounded border transition ' +
+                            'min-h-[40px] text-xs sm:text-sm uppercase font-bold px-3.5 py-2 rounded-lg border transition ' +
                             (isConfirmingDelete
                               ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
                               : 'bg-neutral-900 hover:bg-red-950/70 text-red-400 border-red-900/80') +
