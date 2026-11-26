@@ -389,8 +389,8 @@ export default function ExecutiveAppointments({
   })
 
   return (
-    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-yellow-500/30 pb-4">
+    <div className="bg-neutral-900 border-2 border-green-500/80 rounded-lg p-6 shadow-xl space-y-5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-green-500/30 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded bg-yellow-400 text-neutral-950 text-[10px] font-bold uppercase">
