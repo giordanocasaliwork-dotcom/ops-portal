@@ -348,28 +348,28 @@ export default function BackupManager({ userEmail, onAuditUpdated }: BackupManag
   }
 
   return (
-    <div className="bg-neutral-900 border-2 border-red-500/80 rounded-lg p-6 shadow-xl space-y-4">
+    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-red-500 rounded-xl p-4 sm:p-6 shadow-xl space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase">
-              COLD STORAGE • SOLO ADMIN
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/40 text-xs font-bold uppercase">
+              Cold Storage • Solo Admin
             </span>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
+            <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
               Backup Completo &amp; Esportazione Dati su USB
             </h2>
           </div>
-          <p className="text-xs text-neutral-500 mt-1">
+          <p className="text-xs sm:text-sm text-neutral-400 mt-1">
             Scarica l&apos;intero archivio operativo in formato HTML consultabile offline da chiavetta USB oppure in JSON grezzo
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             type="button"
             disabled={exportingFormat !== null}
             onClick={() => handleExport('HTML')}
-            className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase tracking-wider px-4 py-2 rounded transition disabled:opacity-50"
+            className="min-h-[42px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition disabled:opacity-50"
           >
             {exportingFormat === 'HTML'
               ? 'Generazione Archivio...'
@@ -380,7 +380,7 @@ export default function BackupManager({ userEmail, onAuditUpdated }: BackupManag
             type="button"
             disabled={exportingFormat !== null}
             onClick={() => handleExport('JSON')}
-            className="bg-neutral-950 hover:bg-neutral-800 text-sky-300 border border-sky-700/80 font-semibold text-xs uppercase tracking-wider px-4 py-2 rounded transition disabled:opacity-50"
+            className="min-h-[42px] bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 font-semibold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition disabled:opacity-50"
           >
             {exportingFormat === 'JSON'
               ? 'Esportazione JSON...'
@@ -390,18 +390,18 @@ export default function BackupManager({ userEmail, onAuditUpdated }: BackupManag
       </div>
 
       {error && (
-        <div className="p-3 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+        <div className="p-3.5 bg-red-950/50 border border-red-800 text-red-200 text-sm rounded-xl">
           {error}
         </div>
       )}
 
       {lastBackupInfo && (
-        <div className="p-3 bg-emerald-950/40 border border-emerald-800/80 text-emerald-200 text-xs rounded flex items-center justify-between gap-2">
+        <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/80 text-emerald-200 text-sm rounded-xl flex items-center justify-between gap-3">
           <span>{lastBackupInfo}</span>
           <button
             type="button"
             onClick={() => setLastBackupInfo(null)}
-            className="text-[11px] uppercase text-emerald-300 hover:text-white shrink-0"
+            className="text-xs font-bold uppercase text-emerald-300 hover:text-white shrink-0"
           >
             Chiudi
           </button>
