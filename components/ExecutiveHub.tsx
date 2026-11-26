@@ -266,8 +266,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
   }
 
   return (
-    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-yellow-500/30 pb-4">
+    <div className="bg-neutral-900 border-2 border-orange-500/80 rounded-lg p-6 shadow-xl space-y-5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-orange-500/30 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 text-[10px] font-bold uppercase">
