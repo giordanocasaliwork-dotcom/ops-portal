@@ -265,10 +265,10 @@ function MissionRiskPanel({
   const medicalList = parseLines(risk?.medical_facilities)
 
   return (
-    <div className="border-t border-neutral-800 pt-4 bg-neutral-900/60 rounded-lg p-4 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs uppercase tracking-wider font-bold text-emerald-400">
-          Scheda Intelligence - Risk Assessment, Country Profile, Safe Havens &amp; Piano B
+    <div className="border-t border-neutral-800 pt-4 bg-neutral-900/70 rounded-xl p-4 sm:p-5 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="text-xs sm:text-sm uppercase tracking-wider font-bold text-emerald-400">
+          Intelligence • Risk Assessment, Country Profile, Safe Havens &amp; Piano B
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin && (
@@ -276,64 +276,64 @@ function MissionRiskPanel({
               type="button"
               disabled={isAnalyzingAi}
               onClick={onRunAiAnalysis}
-              className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1 rounded transition disabled:opacity-50"
+              className="min-h-[38px] bg-sky-400 hover:bg-sky-300 text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition disabled:opacity-50"
             >
               {isAnalyzingAi
-                ? 'Analisi AI Real-Time in corso...'
+                ? 'Analisi AI in corso...'
                 : risk
-                ? 'Aggiorna Analisi AI Real-Time'
-                : 'Genera Analisi AI Real-Time'}
+                ? 'Aggiorna Analisi AI'
+                : 'Genera Analisi AI'}
             </button>
           )}
           <button
             type="button"
             onClick={onPrintMission}
-            className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-[11px] uppercase px-3 py-1 rounded transition"
+            className="min-h-[38px] bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition"
           >
             PDF / Stampa
           </button>
           <button
             type="button"
             onClick={handleCopyBriefing}
-            className="bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-[11px] uppercase px-3 py-1 rounded transition"
+            className="min-h-[38px] bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
           >
-            {copied ? 'Briefing Copiato' : 'Copia Briefing Operativo'}
+            {copied ? 'Briefing Copiato' : 'Copia Briefing'}
           </button>
           {isAdmin && !editing && (
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
+              className="min-h-[38px] bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 text-xs uppercase px-3.5 py-1.5 rounded-lg transition font-semibold"
             >
-              {risk ? 'Modifica Manuale' : 'Compila Manuale'}
+              {risk ? 'Modifica' : 'Compila Manuale'}
             </button>
           )}
         </div>
       </div>
 
       {isAnalyzingAi && (
-        <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded">
-          Valutazione tattica server-side in corso: analisi tappe multimodali, profilo Paese estero (valuta, vaccini, norme culturali, frontiere), choke points, Safe Havens, DEA e Piano B...
+        <div className="p-3.5 bg-sky-950/60 border border-sky-700 text-sky-200 text-sm rounded-lg">
+          Valutazione tattica server-side in corso: analisi tappe multimodali, profilo Paese estero, choke points, Safe Havens, DEA e Piano B...
         </div>
       )}
 
       {panelError && (
-        <div className="p-2.5 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+        <div className="p-3 bg-red-950/50 border border-red-800 text-red-200 text-sm rounded-lg">
           {panelError}
         </div>
       )}
 
       {isAdmin && editing ? (
-        <form onSubmit={handleSave} className="space-y-3 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <form onSubmit={handleSave} className="space-y-3.5 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Livello Minaccia Stimato *
               </label>
               <select
                 value={threatLevel}
                 onChange={(e) => setThreatLevel(e.target.value as ThreatLevel)}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               >
                 <option value="LOW">LOW (Basso - Ordinario)</option>
                 <option value="MODERATE">MODERATE (Moderato - Attenzione)</option>
@@ -343,7 +343,7 @@ function MissionRiskPanel({
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Contatti Emergenza / Ambasciate / Sala Operativa
               </label>
               <input
@@ -351,12 +351,12 @@ function MissionRiskPanel({
                 value={emergencyContacts}
                 onChange={(e) => setEmergencyContacts(e.target.value)}
                 placeholder="Es. NUE 112 - Ambasciata d'Italia - Unita di Crisi +39 06 36225"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Choke Points, Tappe &amp; Country Intelligence
               </label>
               <textarea
@@ -364,38 +364,38 @@ function MissionRiskPanel({
                 value={chokePoints}
                 onChange={(e) => setChokePoints(e.target.value)}
                 placeholder="Analisi tappe, valichi/terminal, profilo Paese (valuta, vaccini, norme), choke points"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Safe Havens, Presidi FFOO &amp; Ambasciate (uno per riga per link Maps)
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Safe Havens, Presidi FFOO &amp; Ambasciate (uno per riga)
               </label>
               <textarea
                 rows={4}
                 value={safeHavens}
                 onChange={(e) => setSafeHavens(e.target.value)}
-                placeholder="Es. Ambasciata d'Italia Riyadh"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                placeholder="Es. Ambasciata d'Italia Nairobi"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Strutture Sanitarie / DEA (uno per riga per link Maps)
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Strutture Sanitarie / DEA (uno per riga)
               </label>
               <textarea
                 rows={3}
                 value={medicalFacilities}
                 onChange={(e) => setMedicalFacilities(e.target.value)}
-                placeholder="Es. King Faisal Specialist Hospital Riyadh"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                placeholder="Es. Aga Khan University Hospital Nairobi"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Piano B — Itinerario Alternativo &amp; Esfiltrazione
               </label>
               <textarea
@@ -403,17 +403,17 @@ function MissionRiskPanel({
                 value={evacuationRoute}
                 onChange={(e) => setEvacuationRoute(e.target.value)}
                 placeholder="Percorso secondario, riprotezione voli/treni e vie di esfiltrazione"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-200"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end gap-2.5 pt-1">
             {risk && (
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="bg-neutral-950 text-neutral-400 border border-neutral-700 text-xs uppercase px-3 py-1.5 rounded"
+                className="min-h-[38px] bg-neutral-950 text-neutral-300 border border-neutral-700 text-xs uppercase px-4 py-1.5 rounded-lg font-semibold"
               >
                 Annulla
               </button>
@@ -421,37 +421,37 @@ function MissionRiskPanel({
             <button
               type="submit"
               disabled={saving}
-              className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+              className="min-h-[38px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs uppercase px-5 py-1.5 rounded-lg transition disabled:opacity-50"
             >
               {saving ? 'Salvataggio...' : 'Salva Scheda Risk Assessment'}
             </button>
           </div>
         </form>
       ) : risk ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-yellow-300 font-bold mb-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-4">
+            <div className="text-xs uppercase text-amber-400 font-bold mb-2">
               Country Intelligence, Analisi Tappe &amp; Choke Points (Percorso A)
             </div>
-            <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
+            <div className="text-neutral-100 whitespace-pre-line leading-relaxed">
               {risk.choke_points || 'Nessuna criticita segnalata.'}
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-emerald-400 font-bold mb-1.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-2">
               Safe Havens, Presidi FFOO &amp; Ambasciate
             </div>
             {safeHavenList.length > 0 ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {safeHavenList.map((entry, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-2">
-                    <span className="text-neutral-200">{entry}</span>
+                    <span className="text-neutral-100">{entry}</span>
                     <a
                       href={buildMapsSearchUrl(entry)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                      className="shrink-0 text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
                     >
                       Maps ↗
                     </a>
@@ -463,20 +463,20 @@ function MissionRiskPanel({
             )}
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-sky-400 font-bold mb-1.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4">
+            <div className="text-xs uppercase text-sky-400 font-bold mb-2">
               Strutture Sanitarie / DEA Lungo Tratta
             </div>
             {medicalList.length > 0 ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {medicalList.map((entry, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-2">
-                    <span className="text-neutral-200">{entry}</span>
+                    <span className="text-neutral-100">{entry}</span>
                     <a
                       href={buildMapsSearchUrl(entry)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-400 border border-sky-800/70 transition"
+                      className="shrink-0 text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-sky-400 border border-sky-800/70 transition"
                     >
                       Maps ↗
                     </a>
@@ -488,34 +488,34 @@ function MissionRiskPanel({
             )}
           </div>
 
-          <div className="md:col-span-2 bg-neutral-950 border border-emerald-800/70 rounded p-3">
-            <div className="text-[10px] uppercase text-emerald-300 font-bold mb-1">
+          <div className="md:col-span-2 bg-neutral-950 border border-emerald-800/60 rounded-xl p-4">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-2">
               Piano B — Itinerario Alternativo &amp; Esfiltrazione
             </div>
-            <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
+            <div className="text-neutral-100 whitespace-pre-line leading-relaxed">
               {risk.evacuation_route || 'Nessun itinerario secondario inserito.'}
             </div>
           </div>
 
-          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <span className="text-[10px] uppercase text-neutral-500 font-bold mr-2">
+              <span className="text-xs uppercase text-neutral-400 font-bold mr-2">
                 Contatti Emergenza:
               </span>
-              <span className="text-neutral-200">
+              <span className="text-neutral-100 font-medium">
                 {risk.emergency_contacts || 'NUE 112 - Unita di Crisi Farnesina +39 06 36225'}
               </span>
             </div>
             {risk.updated_at && (
-              <span className="text-[10px] text-neutral-500">
+              <span className="text-xs font-mono text-neutral-400">
                 Aggiornato: {formatDate(risk.updated_at)}
               </span>
             )}
           </div>
         </div>
       ) : (
-        <div className="text-xs text-neutral-500 py-2">
-          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI Real-Time&quot; per elaborare il percorso e tutte le tappe.
+        <div className="text-sm text-neutral-400 py-2">
+          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI&quot; per elaborare il percorso e tutte le tappe.
         </div>
       )}
     </div>
@@ -661,22 +661,22 @@ function ExecutiveBriefPanel({
   }
 
   return (
-    <div className="border-t border-amber-800/70 pt-4 bg-amber-950/15 rounded-lg p-4 space-y-4">
+    <div className="border-t border-amber-800/60 pt-4 bg-amber-950/15 rounded-xl p-4 sm:p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 text-[10px] font-bold uppercase">
-            SOLO DIREZIONE
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase">
+            Solo Direzione
           </span>
-          <span className="text-xs uppercase tracking-wider font-bold text-amber-300">
+          <span className="text-xs sm:text-sm uppercase tracking-wider font-bold text-amber-300">
             Dossier Incontro &amp; Travel Management
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleCopyExecutiveBrief}
-            className="bg-neutral-950 hover:bg-neutral-800 text-amber-200 border border-amber-800/80 text-[11px] uppercase px-3 py-1 rounded transition"
+            className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-amber-200 border border-amber-800/80 text-xs uppercase px-3 py-1.5 rounded-lg font-semibold transition"
           >
             {copiedExec ? 'Dossier Copiato' : 'Copia per Direzione'}
           </button>
@@ -684,7 +684,7 @@ function ExecutiveBriefPanel({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="bg-amber-950 hover:bg-amber-900 text-amber-200 border border-amber-700 text-[11px] uppercase px-3 py-1 rounded transition font-semibold"
+              className="min-h-[36px] bg-amber-950 hover:bg-amber-900 text-amber-200 border border-amber-700 text-xs uppercase px-3 py-1.5 rounded-lg transition font-semibold"
             >
               {brief ? 'Modifica Dossier' : 'Compila Dossier'}
             </button>
@@ -693,16 +693,16 @@ function ExecutiveBriefPanel({
       </div>
 
       {briefError && (
-        <div className="p-2.5 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+        <div className="p-3 bg-red-950/50 border border-red-800 text-red-200 text-sm rounded-lg">
           {briefError}
         </div>
       )}
 
       {editing ? (
-        <form onSubmit={handleSaveBrief} className="space-y-3 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <form onSubmit={handleSaveBrief} className="space-y-3.5 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Controparte / Interlocutore Principale
               </label>
               <input
@@ -710,12 +710,12 @@ function ExecutiveBriefPanel({
                 value={counterpartName}
                 onChange={(e) => setCounterpartName(e.target.value)}
                 placeholder="Nome e Cognome interlocutore"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Ruolo / Societa / Istituzione
               </label>
               <input
@@ -723,12 +723,12 @@ function ExecutiveBriefPanel({
                 value={counterpartRole}
                 onChange={(e) => setCounterpartRole(e.target.value)}
                 placeholder="Es. CEO / Partner / Funzionario"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Travel Booking (Voli / Treni / PNR / Gate)
               </label>
               <textarea
@@ -736,12 +736,12 @@ function ExecutiveBriefPanel({
                 value={travelBookingRef}
                 onChange={(e) => setTravelBookingRef(e.target.value)}
                 placeholder="Es. Volo AZ610 PNR X8Y9Z2 - Fast Track / Lounge"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Ospitalita (Hotel / Check-in / Ristorante Riservato)
               </label>
               <textarea
@@ -749,12 +749,12 @@ function ExecutiveBriefPanel({
                 value={hospitalityDetails}
                 onChange={(e) => setHospitalityDetails(e.target.value)}
                 placeholder="Struttura, codice prenotazione, tavolo riservato, preferenze"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Obiettivo Strategico dell&apos;Incontro
               </label>
               <textarea
@@ -762,12 +762,12 @@ function ExecutiveBriefPanel({
                 value={meetingObjective}
                 onChange={(e) => setMeetingObjective(e.target.value)}
                 placeholder="Esito atteso, firma accordo, negoziazione"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Talking Points &amp; Punti Sensibili
               </label>
               <textarea
@@ -775,13 +775,13 @@ function ExecutiveBriefPanel({
                 value={talkingPoints}
                 onChange={(e) => setTalkingPoints(e.target.value)}
                 placeholder="Temi chiave da trattare e argomenti da evitare"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[11px] uppercase text-amber-400/90 mb-1">
+            <label className="block text-xs uppercase text-amber-400 mb-1.5 font-semibold">
               Note Riservate Assistente di Direzione (Invisibili agli operatori logistici)
             </label>
             <input
@@ -789,16 +789,16 @@ function ExecutiveBriefPanel({
               value={confidentialNotes}
               onChange={(e) => setConfidentialNotes(e.target.value)}
               placeholder="Dettagli sensibili, omaggi protocollo, accorgimenti relazionali"
-              className="w-full bg-neutral-950 border border-amber-900/70 rounded p-2 text-xs text-neutral-100"
+              className="w-full bg-neutral-950 border border-amber-800/70 rounded-lg p-2.5 text-base sm:text-sm text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end gap-2.5 pt-1">
             {brief && (
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="bg-neutral-950 text-neutral-400 border border-neutral-700 text-xs uppercase px-3 py-1.5 rounded"
+                className="min-h-[38px] bg-neutral-950 text-neutral-300 border border-neutral-700 text-xs uppercase px-4 py-1.5 rounded-lg font-semibold"
               >
                 Annulla
               </button>
@@ -806,65 +806,65 @@ function ExecutiveBriefPanel({
             <button
               type="submit"
               disabled={saving}
-              className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-4 py-1.5 rounded transition disabled:opacity-50"
+              className="min-h-[38px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-5 py-1.5 rounded-lg transition disabled:opacity-50"
             >
               {saving ? 'Salvataggio...' : 'Salva Dossier Direzionale'}
             </button>
           </div>
         </form>
       ) : brief ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-amber-400 font-bold mb-1">
               Interlocutore &amp; Ruolo
             </div>
-            <div className="text-neutral-100 font-semibold">
+            <div className="text-white font-semibold text-base">
               {brief.counterpart_name || 'Non specificato'}
             </div>
             {brief.counterpart_role && (
-              <div className="text-neutral-400 mt-0.5">{brief.counterpart_role}</div>
+              <div className="text-neutral-300 mt-0.5">{brief.counterpart_role}</div>
             )}
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-amber-400 font-bold mb-1">
               Obiettivo Strategico
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-100 whitespace-pre-line">
               {brief.meeting_objective || 'Nessun obiettivo registrato.'}
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
               Travel Booking (Voli / Treni / PNR)
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-100 whitespace-pre-line">
               {brief.travel_booking_ref || 'Nessun titolo di viaggio collegato.'}
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-400 font-bold mb-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
               Ospitalita &amp; Hotel
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-100 whitespace-pre-line">
               {brief.hospitality_details || 'Nessuna prenotazione alberghiera.'}
             </div>
           </div>
 
-          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-amber-400 font-bold mb-1">
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-amber-400 font-bold mb-1">
               Talking Points &amp; Punti Sensibili
             </div>
-            <div className="text-neutral-200 whitespace-pre-line">
+            <div className="text-neutral-100 whitespace-pre-line">
               {brief.talking_points || 'Nessun talking point inserito.'}
             </div>
           </div>
 
           {brief.confidential_notes && (
-            <div className="md:col-span-2 bg-amber-950/30 border border-amber-800/70 rounded p-3">
-              <div className="text-[10px] uppercase text-amber-300 font-bold mb-1">
+            <div className="md:col-span-2 bg-amber-950/30 border border-amber-800/70 rounded-xl p-3.5">
+              <div className="text-xs uppercase text-amber-300 font-bold mb-1">
                 Note Riservate Direzione
               </div>
               <div className="text-amber-100">{brief.confidential_notes}</div>
@@ -872,7 +872,7 @@ function ExecutiveBriefPanel({
           )}
         </div>
       ) : (
-        <div className="text-xs text-neutral-500 py-2">
+        <div className="text-sm text-neutral-400 py-2">
           Dossier Direzionale non ancora compilato per questa missione.
         </div>
       )}
@@ -1964,28 +1964,28 @@ export default function MissionBoard({
   })
 
   const statusBadge = (status: Mission['status']) => {
-    if (status === 'pianificata') return 'bg-amber-950/60 text-amber-300 border-amber-800'
-    if (status === 'in corso') return 'bg-emerald-950/70 text-emerald-300 border-emerald-700'
-    return 'bg-neutral-800/80 text-neutral-400 border-neutral-700'
+    if (status === 'pianificata') return 'bg-amber-950/60 text-amber-300 border-amber-700'
+    if (status === 'in corso') return 'bg-emerald-950/70 text-emerald-300 border-emerald-600'
+    return 'bg-neutral-800 text-neutral-300 border-neutral-700'
   }
 
   const threatBadge = (level?: ThreatLevel) => {
     if (level === 'CRITICAL') return 'bg-red-950 text-red-300 border-red-700'
     if (level === 'HIGH') return 'bg-orange-950/80 text-orange-300 border-orange-700'
     if (level === 'MODERATE') return 'bg-amber-950/70 text-amber-300 border-amber-700'
-    if (level === 'LOW') return 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
-    return 'bg-neutral-900 text-neutral-500 border-neutral-800'
+    if (level === 'LOW') return 'bg-emerald-950/60 text-emerald-300 border-emerald-700'
+    return 'bg-neutral-900 text-neutral-400 border-neutral-700'
   }
 
   return (
-    <div className="bg-neutral-900 border-2 border-white/80 rounded-lg p-6 shadow-xl">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-white/30 pb-4">
+    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-neutral-200 rounded-xl p-4 sm:p-6 shadow-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
+          <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
             Agenda Direzionale, Flotta &amp; Risk Assessment
           </h2>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            Pianificazione movimenti multimodali, analisi AI internazionale real-time, safe havens e Piano B
+          <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+            Movimenti multimodali, analisi AI internazionale, Safe Havens e Piano B
           </p>
         </div>
 
@@ -1994,16 +1994,14 @@ export default function MissionBoard({
             type="button"
             onClick={() => setOnlyMine(!onlyMine)}
             className={
-              'px-2.5 py-1 rounded text-[11px] uppercase border transition font-semibold ' +
+              'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase border transition font-semibold ' +
               (onlyMine
                 ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
-                : 'bg-neutral-950 text-neutral-300 border-neutral-700 hover:border-neutral-500')
+                : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
-            Le mie missioni ({myMissionsCount})
+            Le mie ({myMissionsCount})
           </button>
-
-          <span className="text-neutral-700">|</span>
 
           {(['tutte', 'pianificata', 'in corso', 'chiusa'] as const).map((tab) => (
             <button
@@ -2011,10 +2009,10 @@ export default function MissionBoard({
               type="button"
               onClick={() => setFilter(tab)}
               className={
-                'px-2.5 py-1 rounded text-[11px] uppercase border transition ' +
+                'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase border transition ' +
                 (filter === tab
-                  ? 'bg-neutral-200 text-neutral-950 border-neutral-200 font-bold'
-                  : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-600')
+                  ? 'bg-neutral-100 text-neutral-950 border-neutral-100 font-bold'
+                  : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
               }
             >
               {tab}
@@ -2032,7 +2030,7 @@ export default function MissionBoard({
                     setShowForm(false)
                   }
                 }}
-                className="ml-1 bg-amber-950/70 hover:bg-amber-900/70 text-amber-300 border border-amber-700 text-xs uppercase tracking-wider px-3 py-1.5 rounded transition font-semibold"
+                className="min-h-[38px] bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-xs uppercase tracking-wider px-3.5 py-1.5 rounded-lg transition font-semibold"
               >
                 {showMorningBrief ? 'Chiudi Briefing' : 'Morning Briefing'}
               </button>
@@ -2045,7 +2043,7 @@ export default function MissionBoard({
                     setShowMorningBrief(false)
                   }
                 }}
-                className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
+                className="min-h-[38px] bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs uppercase tracking-wider px-3.5 py-1.5 rounded-lg transition font-semibold"
               >
                 {showFleet ? 'Chiudi Flotta' : `Flotta (${vehicles.length})`}
               </button>
@@ -2058,7 +2056,7 @@ export default function MissionBoard({
                     setShowMorningBrief(false)
                   }
                 }}
-                className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
+                className="min-h-[38px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
               >
                 {showForm ? 'Chiudi' : '+ Nuova Missione'}
               </button>
@@ -2068,19 +2066,19 @@ export default function MissionBoard({
       </div>
 
       {error && (
-        <div className="mt-4 p-3 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+        <div className="mt-4 p-3.5 bg-red-950/50 border border-red-800 text-red-200 text-sm rounded-lg">
           {error}
         </div>
       )}
 
       {isAdmin && showMorningBrief && (
-        <div className="mt-5 p-4 bg-neutral-950 border border-amber-800/80 rounded-lg space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-5 p-4 sm:p-5 bg-neutral-950 border border-amber-800/80 rounded-xl space-y-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div>
-              <div className="text-xs uppercase tracking-wider text-amber-300 font-bold">
-                Morning Briefing Direzione - Riepilogo Esecutivo Completo
+              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
+                Morning Briefing Direzione — Riepilogo Completo
               </div>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-xs sm:text-sm text-neutral-400">
                 Include appuntamenti, movimentazioni multimodali, Country Intelligence, Safe Havens e Piano B
               </p>
             </div>
@@ -2089,21 +2087,21 @@ export default function MissionBoard({
                 type="button"
                 disabled={sendingTelegramBrief}
                 onClick={handleSendMorningBriefingTelegram}
-                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+                className="min-h-[38px] bg-sky-400 hover:bg-sky-300 text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition disabled:opacity-50"
               >
-                {sendingTelegramBrief ? 'Invio Telegram...' : 'Invia Ora su Telegram'}
+                {sendingTelegramBrief ? 'Invio Telegram...' : 'Invia Telegram'}
               </button>
               <button
                 type="button"
                 onClick={handlePrintMorningBriefing}
-                className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
+                className="min-h-[38px] bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition"
               >
                 PDF / Stampa
               </button>
               <button
                 type="button"
                 onClick={handleCopyMorningBriefing}
-                className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
+                className="min-h-[38px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition"
               >
                 {copiedMorningBrief ? 'Copiato' : 'Copia Testo'}
               </button>
@@ -2111,20 +2109,20 @@ export default function MissionBoard({
           </div>
 
           {telegramBriefStatus && (
-            <div className="p-2.5 bg-sky-950/60 border border-sky-700 text-sky-200 text-xs rounded">
+            <div className="p-3 bg-sky-950/60 border border-sky-700 text-sky-200 text-sm rounded-lg">
               {telegramBriefStatus}
             </div>
           )}
 
-          <pre className="p-3 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-200 whitespace-pre-wrap font-mono overflow-x-auto max-h-96 overflow-y-auto">
+          <pre className="p-3.5 bg-neutral-900 border border-neutral-800 rounded-lg text-xs sm:text-sm text-neutral-100 whitespace-pre-wrap font-mono overflow-x-auto max-h-96 overflow-y-auto leading-relaxed">
             {generateMorningBriefingText()}
           </pre>
         </div>
       )}
 
       {isAdmin && showFleet && (
-        <div className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4">
-          <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
+        <div className="mt-5 p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4">
+          <div className="text-sm uppercase tracking-wider text-emerald-400 font-bold">
             Registro Flotta &amp; Assetti Mobili
           </div>
 
@@ -2135,7 +2133,7 @@ export default function MissionBoard({
               value={vehCallsign}
               onChange={(e) => setVehCallsign(e.target.value.toUpperCase())}
               placeholder="Callsign (es. UNIT-01)"
-              className="bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 uppercase"
+              className="bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white uppercase"
             />
             <input
               type="text"
@@ -2143,7 +2141,7 @@ export default function MissionBoard({
               value={vehModel}
               onChange={(e) => setVehModel(e.target.value)}
               placeholder="Modello (es. Mercedes V-Class)"
-              className="bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+              className="bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
             />
             <input
               type="text"
@@ -2151,12 +2149,12 @@ export default function MissionBoard({
               value={vehPlate}
               onChange={(e) => setVehPlate(e.target.value.toUpperCase())}
               placeholder="Targa (es. GH123AB)"
-              className="bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 uppercase"
+              className="bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white uppercase"
             />
             <select
               value={vehCategory}
               onChange={(e) => setVehCategory(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+              className="bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
             >
               <option value="Executive">Executive Sedan / Van</option>
               <option value="Armored">Blindato (B6/B7)</option>
@@ -2166,36 +2164,38 @@ export default function MissionBoard({
             <button
               type="submit"
               disabled={loading}
-              className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs uppercase rounded px-3 py-2 transition"
+              className="min-h-[42px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase rounded-lg px-4 py-2 transition"
             >
               + Aggiungi Mezzo
             </button>
           </form>
 
           {vehicles.length > 0 ? (
-            <div className="overflow-x-auto border border-neutral-800 rounded">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-neutral-900 text-neutral-500 uppercase border-b border-neutral-800">
+            <div className="overflow-x-auto border border-neutral-800 rounded-lg">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-neutral-900 text-neutral-400 uppercase border-b border-neutral-800 text-xs">
                   <tr>
-                    <th className="px-3 py-2">Callsign</th>
-                    <th className="px-3 py-2">Modello</th>
-                    <th className="px-3 py-2">Targa</th>
-                    <th className="px-3 py-2">Categoria</th>
-                    <th className="px-3 py-2 text-right">Azioni</th>
+                    <th className="px-3.5 py-2.5">Callsign</th>
+                    <th className="px-3.5 py-2.5">Modello</th>
+                    <th className="px-3.5 py-2.5">Targa</th>
+                    <th className="px-3.5 py-2.5">Categoria</th>
+                    <th className="px-3.5 py-2.5 text-right">Azioni</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-800/60">
+                <tbody className="divide-y divide-neutral-800/70">
                   {vehicles.map((v) => (
                     <tr key={v.id}>
-                      <td className="px-3 py-2 font-bold text-emerald-400">{v.callsign}</td>
-                      <td className="px-3 py-2 text-neutral-200">{v.model}</td>
-                      <td className="px-3 py-2 text-neutral-300">{v.plate}</td>
-                      <td className="px-3 py-2 text-neutral-400">{v.category}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3.5 py-2.5 font-bold font-mono text-emerald-400">
+                        {v.callsign}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-white">{v.model}</td>
+                      <td className="px-3.5 py-2.5 font-mono text-neutral-200">{v.plate}</td>
+                      <td className="px-3.5 py-2.5 text-neutral-300">{v.category}</td>
+                      <td className="px-3.5 py-2.5 text-right">
                         <button
                           type="button"
                           onClick={() => handleDeleteVehicle(v)}
-                          className="text-red-400 hover:text-red-300 text-[11px] uppercase"
+                          className="text-red-400 hover:text-red-300 text-xs font-semibold uppercase"
                         >
                           Rimuovi
                         </button>
@@ -2206,7 +2206,7 @@ export default function MissionBoard({
               </table>
             </div>
           ) : (
-            <p className="text-xs text-neutral-500">
+            <p className="text-sm text-neutral-400">
               Nessun mezzo censito in flotta. Inserisci il primo veicolo qui sopra.
             </p>
           )}
@@ -2216,15 +2216,15 @@ export default function MissionBoard({
       {isAdmin && showForm && (
         <form
           onSubmit={handleCreateMission}
-          className="mt-5 p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-4"
+          className="mt-5 p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
         >
-          <div className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
+          <div className="text-sm uppercase tracking-wider text-emerald-400 font-bold">
             Nuovo Ordine di Servizio / Trasferta Multimodale
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Cliente / VIP / Oggetto Agenda *
               </label>
               <input
@@ -2233,18 +2233,18 @@ export default function MissionBoard({
                 value={clientVip}
                 onChange={(e) => setClientVip(e.target.value)}
                 placeholder="Denominazione soggetto o codice"
-                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Operatore Assegnato (Callsign)
               </label>
               <select
                 value={assignedOperatorId}
                 onChange={(e) => setAssignedOperatorId(e.target.value)}
-                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               >
                 <option value="">-- Non ancora assegnato --</option>
                 {operators.map((op) => (
@@ -2257,7 +2257,7 @@ export default function MissionBoard({
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Assetto / Mezzo Principale *
               </label>
               {vehicles.length > 0 ? (
@@ -2265,7 +2265,7 @@ export default function MissionBoard({
                   required
                   value={assignedVehicleId}
                   onChange={(e) => setAssignedVehicleId(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 >
                   <option value="">-- Seleziona veicolo dal registro --</option>
                   {vehicles.map((v) => (
@@ -2281,14 +2281,14 @@ export default function MissionBoard({
                   value={manualVehicle}
                   onChange={(e) => setManualVehicle(e.target.value)}
                   placeholder="Modello / Targa / Callsign / Multimodale"
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                   Inizio Finestra *
                 </label>
                 <input
@@ -2296,12 +2296,12 @@ export default function MissionBoard({
                   required
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                   Fine Finestra *
                 </label>
                 <input
@@ -2309,13 +2309,13 @@ export default function MissionBoard({
                   required
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Origine Generale / Partenza (Pick-up) *
               </label>
               <input
@@ -2323,13 +2323,13 @@ export default function MissionBoard({
                 required
                 value={pickupPoint}
                 onChange={(e) => setPickupPoint(e.target.value)}
-                placeholder="Es. Roma EUR / Roma Termini"
-                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                placeholder="Es. Roma EUR, Italia"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Destinazione Finale (Drop-off) *
               </label>
               <input
@@ -2337,26 +2337,26 @@ export default function MissionBoard({
                 required
                 value={dropoffPoint}
                 onChange={(e) => setDropoffPoint(e.target.value)}
-                placeholder="Es. Riyadh, Arabia Saudita"
-                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                placeholder="Es. Nairobi Westlands, Kenya"
+                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
           </div>
 
-          <div className="bg-neutral-900/90 border border-sky-800/70 rounded-lg p-3.5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
               <div>
-                <div className="text-[11px] uppercase font-bold text-sky-300">
+                <div className="text-xs sm:text-sm uppercase font-bold text-sky-400">
                   Piano di Viaggio &amp; Tappe Multimodali (Auto, Treno, Volo, Scali)
                 </div>
-                <p className="text-[11px] text-neutral-400">
-                  Aggiungi ogni segmento del viaggio (es. Roma &rarr; Parigi in auto/treno, Parigi CDG &rarr; Riyadh RUH in volo) per l&apos;analisi AI completa
+                <p className="text-xs sm:text-sm text-neutral-400">
+                  Aggiungi ogni segmento del viaggio per l&apos;analisi AI completa
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleAddDraftLeg}
-                className="bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1.5 rounded transition shrink-0"
+                className="min-h-[38px] bg-sky-400 hover:bg-sky-300 text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition shrink-0"
               >
                 + Aggiungi Tappa / Mezzo
               </button>
@@ -2367,24 +2367,24 @@ export default function MissionBoard({
                 {draftLegs.map((leg, idx) => (
                   <div
                     key={leg.id}
-                    className="bg-neutral-950 border border-neutral-800 rounded p-3 space-y-2.5 text-xs"
+                    className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5 space-y-3 text-sm"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase text-sky-400">
+                      <span className="text-xs font-bold uppercase text-sky-400">
                         Tappa #{idx + 1}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleRemoveDraftLeg(leg.id)}
-                        className="text-[11px] uppercase text-red-400 hover:text-red-300"
+                        className="text-xs font-semibold uppercase text-red-400 hover:text-red-300"
                       >
                         Rimuovi Tappa
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Modalita Trasporto *
                         </label>
                         <select
@@ -2392,7 +2392,7 @@ export default function MissionBoard({
                           onChange={(e) =>
                             handleUpdateDraftLeg(leg.id, 'transport_mode', e.target.value)
                           }
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         >
                           <option value="Auto / NCC">Auto / NCC</option>
                           <option value="Auto Blindata">Auto Blindata</option>
@@ -2405,7 +2405,7 @@ export default function MissionBoard({
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Partenza Tappa *
                         </label>
                         <input
@@ -2413,13 +2413,13 @@ export default function MissionBoard({
                           required
                           value={leg.origin}
                           onChange={(e) => handleUpdateDraftLeg(leg.id, 'origin', e.target.value)}
-                          placeholder="Es. Roma Termini / Parigi CDG T2"
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          placeholder="Es. Roma Fiumicino (FCO)"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Arrivo Tappa *
                         </label>
                         <input
@@ -2429,14 +2429,14 @@ export default function MissionBoard({
                           onChange={(e) =>
                             handleUpdateDraftLeg(leg.id, 'destination', e.target.value)
                           }
-                          placeholder="Es. Parigi Gare de Lyon / Riyadh RUH"
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          placeholder="Es. Nairobi (NBO)"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
-                          Vettore / Volo / Treno / Targa
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
+                          Vettore / Volo / Targa
                         </label>
                         <input
                           type="text"
@@ -2444,13 +2444,13 @@ export default function MissionBoard({
                           onChange={(e) =>
                             handleUpdateDraftLeg(leg.id, 'carrier_code', e.target.value)
                           }
-                          placeholder="Es. Volo SV126 / TGV 9240"
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          placeholder="Es. Volo KQ125"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Partenza Tappa (Opz.)
                         </label>
                         <input
@@ -2459,12 +2459,12 @@ export default function MissionBoard({
                           onChange={(e) =>
                             handleUpdateDraftLeg(leg.id, 'departure_time', e.target.value)
                           }
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Arrivo Tappa (Opz.)
                         </label>
                         <input
@@ -2473,20 +2473,20 @@ export default function MissionBoard({
                           onChange={(e) =>
                             handleUpdateDraftLeg(leg.id, 'arrival_time', e.target.value)
                           }
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
 
                       <div className="sm:col-span-2">
-                        <label className="block text-[10px] uppercase text-neutral-400 mb-1">
-                          Dettagli Operativi Tappa (Terminal, Gate, Dogana, Coincidenza)
+                        <label className="block text-xs uppercase text-neutral-400 mb-1">
+                          Dettagli Operativi Tappa
                         </label>
                         <input
                           type="text"
                           value={leg.notes}
                           onChange={(e) => handleUpdateDraftLeg(leg.id, 'notes', e.target.value)}
-                          placeholder="Es. Scalo 2h30m, ritiro bagagli, accoglienza driver VIP fuori dogana"
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200"
+                          placeholder="Es. Terminal, Gate, Dogana, Scorta locale"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                         />
                       </div>
                     </div>
@@ -2494,14 +2494,14 @@ export default function MissionBoard({
                 ))}
               </div>
             ) : (
-              <div className="text-[11px] text-neutral-500">
-                Nessuna tappa intermedia aggiunta: verra analizzata la tratta diretta tra Partenza e Destinazione Finale.
+              <div className="text-xs sm:text-sm text-neutral-400">
+                Nessuna tappa intermedia aggiunta: verra analizzata la tratta diretta.
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+            <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
               Note Logistica Generali (Visibili anche all&apos;operatore sul campo)
             </label>
             <input
@@ -2509,17 +2509,17 @@ export default function MissionBoard({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Accesso carraio, pass ZTL, tempi di attesa, dotazioni"
-              className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
             />
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <label className="flex items-center gap-2 text-xs text-sky-300 cursor-pointer select-none">
+            <label className="flex items-center gap-2.5 text-xs sm:text-sm text-sky-300 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={autoAiOnCreate}
                 onChange={(e) => setAutoAiOnCreate(e.target.checked)}
-                className="accent-sky-400 w-4 h-4"
+                className="accent-sky-400 w-4 h-4 shrink-0"
               />
               <span>
                 Elabora automaticamente Valutazione Rischio AI Real-Time (Tappe, Profilo Paese, Safe Havens &amp; Piano B)
@@ -2529,7 +2529,7 @@ export default function MissionBoard({
             <button
               type="submit"
               disabled={loading}
-              className="bg-neutral-200 hover:bg-white text-neutral-950 font-bold text-xs uppercase tracking-wider px-5 py-2 rounded transition disabled:opacity-50 shrink-0"
+              className="min-h-[42px] bg-white hover:bg-neutral-200 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-5 py-2 rounded-lg transition disabled:opacity-50 shrink-0"
             >
               {loading ? 'Registrazione...' : 'Conferma e Registra'}
             </button>
@@ -2537,7 +2537,7 @@ export default function MissionBoard({
         </form>
       )}
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-5 space-y-4">
         {filteredMissions.length > 0 ? (
           filteredMissions.map((mission) => {
             const isAssignedToMe = mission.assigned_operator_id === userId
@@ -2559,20 +2559,20 @@ export default function MissionBoard({
               <div
                 key={mission.id}
                 className={
-                  'bg-neutral-950 border rounded-lg p-4 space-y-4 ' +
+                  'bg-neutral-950 border rounded-xl p-4 sm:p-5 space-y-4 ' +
                   (sosAlert
                     ? 'border-red-600'
                     : isAssignedToMe
-                    ? 'border-emerald-800/80'
-                    : 'border-neutral-800/90')
+                    ? 'border-emerald-700/80'
+                    : 'border-neutral-800')
                 }
               >
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={
-                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          'px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold ' +
                           statusBadge(mission.status)
                         }
                       >
@@ -2580,33 +2580,36 @@ export default function MissionBoard({
                       </span>
                       <span
                         className={
-                          'px-2 py-0.5 rounded border text-[10px] uppercase font-bold ' +
+                          'px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold ' +
                           threatBadge(risk?.threat_level)
                         }
                       >
                         {risk ? `Rischio: ${risk.threat_level}` : 'Rischio: N/D'}
                       </span>
                       {missionLegs.length > 0 && (
-                        <span className="px-2 py-0.5 rounded border text-[10px] uppercase font-bold bg-sky-950/70 text-sky-300 border-sky-700">
-                          {missionLegs.length} Tappe Multimodali
+                        <span className="px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold bg-sky-950/70 text-sky-300 border-sky-700">
+                          {missionLegs.length} Tappe
                         </span>
                       )}
                       {isAdmin && brief && (
-                        <span className="px-2 py-0.5 rounded border text-[10px] uppercase font-bold bg-amber-950/70 text-amber-300 border-amber-700">
+                        <span className="px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold bg-amber-950/70 text-amber-300 border-amber-700">
                           Dossier OK
                         </span>
                       )}
-                      <span className="text-sm font-bold text-neutral-100 uppercase tracking-wide">
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <span className="text-base sm:text-lg font-bold text-white uppercase tracking-wide">
                         {mission.client_vip}
                       </span>
-                      <span className="text-neutral-600">|</span>
-                      <span className="text-neutral-300 font-semibold">
-                        Mezzo: {mission.assigned_vehicle}
+                      <span className="text-neutral-600">•</span>
+                      <span className="text-neutral-200 font-semibold font-mono text-xs sm:text-sm">
+                        {mission.assigned_vehicle}
                       </span>
-                      <span className="text-neutral-600">|</span>
+                      <span className="text-neutral-600">•</span>
                       <span
                         className={
-                          'px-2 py-0.5 rounded text-[11px] font-semibold ' +
+                          'px-2.5 py-0.5 rounded-md text-xs font-semibold ' +
                           (mission.assigned_operator_id
                             ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/70'
                             : 'bg-neutral-900 text-neutral-400 border border-neutral-800')
@@ -2616,13 +2619,12 @@ export default function MissionBoard({
                       </span>
                     </div>
 
-                    <div className="text-neutral-400">
-                      <span className="text-neutral-500">Finestra:</span>{' '}
+                    <div className="text-neutral-300 font-mono text-xs sm:text-sm">
+                      <span className="text-neutral-400 font-sans">Finestra:</span>{' '}
                       {formatDateTime(mission.start_time)} &rarr; {formatDateTime(mission.end_time)}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 text-neutral-300">
-                      <span className="text-neutral-500">Itinerario:</span>
+                    <div className="flex flex-wrap items-center gap-2 text-neutral-100 text-sm sm:text-base font-medium">
                       <a
                         href={buildMapsSearchUrl(mission.pickup_point)}
                         target="_blank"
@@ -2644,24 +2646,27 @@ export default function MissionBoard({
                         href={buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="ml-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
+                        className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
                       >
                         Rotta Maps ↗
                       </a>
                     </div>
 
                     {missionLegs.length > 0 && (
-                      <div className="mt-1.5 bg-neutral-900/90 border border-sky-900/60 rounded p-2.5 space-y-1 text-[11px]">
-                        <div className="text-[10px] uppercase font-bold text-sky-300">
+                      <div className="mt-2 bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5 text-xs sm:text-sm">
+                        <div className="text-xs uppercase font-bold text-sky-400">
                           Dettaglio Tappe &amp; Mezzi:
                         </div>
                         {missionLegs.map((leg, idx) => (
-                          <div key={idx} className="text-neutral-300 flex flex-wrap items-center gap-1.5">
-                            <span className="px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px] font-bold uppercase">
+                          <div
+                            key={idx}
+                            className="text-neutral-200 flex flex-wrap items-center gap-1.5"
+                          >
+                            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800 text-xs font-bold uppercase">
                               {leg.leg_number || idx + 1}. {leg.transport_mode}
                             </span>
                             {leg.carrier_code && (
-                              <span className="text-amber-300 font-semibold">
+                              <span className="text-amber-300 font-mono font-semibold">
                                 [{leg.carrier_code}]
                               </span>
                             )}
@@ -2677,8 +2682,8 @@ export default function MissionBoard({
                     )}
 
                     {isAdmin && brief?.counterpart_name && (
-                      <div className="text-[11px] text-amber-300/90">
-                        <span className="text-neutral-500">Interlocutore:</span>{' '}
+                      <div className="text-xs sm:text-sm text-amber-300">
+                        <span className="text-neutral-400">Interlocutore:</span>{' '}
                         {brief.counterpart_name}
                         {brief.counterpart_role ? ` (${brief.counterpart_role})` : ''}
                         {brief.travel_booking_ref ? ` | Travel: ${brief.travel_booking_ref}` : ''}
@@ -2686,17 +2691,17 @@ export default function MissionBoard({
                     )}
 
                     {mission.notes && (
-                      <div className="text-neutral-400 italic pt-0.5">
+                      <div className="text-neutral-300 italic text-sm pt-0.5">
                         Note Logistica: {mission.notes}
                       </div>
                     )}
 
                     {lastCheckIn && (
-                      <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px] text-sky-300">
-                        <span className="px-1.5 py-0.5 rounded bg-sky-950/70 border border-sky-800 font-semibold uppercase text-[10px]">
+                      <div className="pt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-sky-300">
+                        <span className="px-2 py-0.5 rounded bg-sky-950/70 border border-sky-800 font-bold uppercase text-xs">
                           Check-in GPS OK {lastCheckIn.time}
                         </span>
-                        <span>
+                        <span className="font-mono">
                           {lastCheckIn.lat}, {lastCheckIn.lng} ({lastCheckIn.accuracy}m)
                         </span>
                         <a
@@ -2711,11 +2716,11 @@ export default function MissionBoard({
                     )}
 
                     {sosAlert && (
-                      <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px] text-red-300">
-                        <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold uppercase text-[10px]">
+                      <div className="pt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-red-300">
+                        <span className="px-2.5 py-0.5 rounded bg-red-600 text-white font-bold uppercase text-xs">
                           ALLERTA SOS INVIATA ({sosAlert.time})
                         </span>
-                        <span>
+                        <span className="font-mono">
                           {sosAlert.coords
                             ? `${sosAlert.coords} (${sosAlert.accuracy}m)`
                             : 'GPS non disponibile'}
@@ -2737,89 +2742,15 @@ export default function MissionBoard({
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
                     <button
                       type="button"
-                      disabled={isSendingSos}
-                      onClick={() => handleSosClick(mission)}
-                      title="Doppio clic rapido per inviare allerta SOS con posizione GPS"
-                      className={
-                        'px-3 py-1.5 rounded text-xs uppercase tracking-wider font-bold border transition ' +
-                        (isConfirmingSos
-                          ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
-                          : 'bg-red-950/80 hover:bg-red-900 text-red-300 border-red-700') +
-                        ' disabled:opacity-50'
-                      }
-                    >
-                      {isSendingSos
-                        ? 'INVIO SOS...'
-                        : isConfirmingSos
-                        ? 'CONFERMA SOS!'
-                        : 'SOS'}
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isCheckingIn}
-                      onClick={() => handleGpsCheckIn(mission)}
-                      className="px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition bg-sky-950/60 hover:bg-sky-900/70 text-sky-300 border-sky-700 disabled:opacity-50"
-                    >
-                      {isCheckingIn ? 'Rilevamento GPS...' : 'Check-in GPS'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadMissionIcs(mission)}
-                      title="Scarica evento calendario (.ics)"
-                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-sky-300 border-sky-800/80"
-                    >
-                      .ICS
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopyFullMissionText(mission)}
-                      title="Copia scheda missione completa (inclusi Safe Havens, Choke Points e Piano B)"
-                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
-                    >
-                      {copiedMissionId === mission.id ? 'Copiato' : 'Copia Testo'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handlePrintMission(mission)}
-                      title="Apri scheda stampabile / Salva PDF completa"
-                      className="px-2.5 py-1.5 rounded text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
-                    >
-                      PDF / Stampa
-                    </button>
-
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setExpandedBriefId(isBriefExpanded ? null : mission.id)
-                          if (!isBriefExpanded) setExpandedRiskId(null)
-                        }}
-                        className={
-                          'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
-                          (isBriefExpanded
-                            ? 'bg-amber-300 text-neutral-950 border-amber-300'
-                            : 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border-amber-700/80')
-                        }
-                      >
-                        {isBriefExpanded ? 'Chiudi Dossier' : 'Dossier & Travel'}
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
                       onClick={() => {
                         setExpandedRiskId(isRiskExpanded ? null : mission.id)
                         if (!isRiskExpanded) setExpandedBriefId(null)
                       }}
                       className={
-                        'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-semibold border transition ' +
+                        'min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
                         (isRiskExpanded
-                          ? 'bg-neutral-200 text-neutral-950 border-neutral-200'
-                          : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-800/80')
+                          ? 'bg-emerald-400 text-neutral-950 border-emerald-400'
+                          : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-700/80')
                       }
                     >
                       {isAnalyzingThis
@@ -2830,13 +2761,84 @@ export default function MissionBoard({
                     </button>
 
                     {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedBriefId(isBriefExpanded ? null : mission.id)
+                          if (!isBriefExpanded) setExpandedRiskId(null)
+                        }}
+                        className={
+                          'min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
+                          (isBriefExpanded
+                            ? 'bg-amber-400 text-neutral-950 border-amber-400'
+                            : 'bg-neutral-900 hover:bg-neutral-800 text-amber-300 border-amber-700/80')
+                        }
+                      >
+                        {isBriefExpanded ? 'Chiudi Dossier' : 'Dossier'}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={isCheckingIn}
+                      onClick={() => handleGpsCheckIn(mission)}
+                      className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-sky-300 border-sky-800/80 disabled:opacity-50"
+                    >
+                      {isCheckingIn ? 'GPS...' : 'Check-in GPS'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSendingSos}
+                      onClick={() => handleSosClick(mission)}
+                      title="Doppio clic rapido per inviare allerta SOS con posizione GPS"
+                      className={
+                        'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
+                        (isConfirmingSos
+                          ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
+                          : 'bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800') +
+                        ' disabled:opacity-50'
+                      }
+                    >
+                      {isSendingSos
+                        ? 'INVIO...'
+                        : isConfirmingSos
+                        ? 'CONFERMA!'
+                        : 'SOS'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyFullMissionText(mission)}
+                      className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
+                    >
+                      {copiedMissionId === mission.id ? 'Copiato' : 'Copia'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePrintMission(mission)}
+                      className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
+                    >
+                      PDF
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadMissionIcs(mission)}
+                      className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700"
+                    >
+                      .ICS
+                    </button>
+
+                    {isAdmin && (
                       <select
                         aria-label="Assegna operatore"
                         value={mission.assigned_operator_id || ''}
                         onChange={(e) =>
                           handleReassignOperator(mission.id, mission.client_vip, e.target.value)
                         }
-                        className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                        className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold rounded-lg px-3 py-1.5"
                       >
                         <option value="">Op: Non assegnato</option>
                         {operators.map((op) => (
@@ -2858,7 +2860,7 @@ export default function MissionBoard({
                           e.target.value as Mission['status']
                         )
                       }
-                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs uppercase rounded px-2.5 py-1.5 focus:outline-none focus:border-neutral-500"
+                      className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
                     >
                       <option value="pianificata">Pianificata</option>
                       <option value="in corso">In Corso</option>
@@ -2869,7 +2871,7 @@ export default function MissionBoard({
                       <button
                         type="button"
                         onClick={() => handleDeleteMission(mission.id, mission.client_vip)}
-                        className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                        className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                       >
                         Elimina
                       </button>
@@ -2917,7 +2919,7 @@ export default function MissionBoard({
             )
           })
         ) : (
-          <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
+          <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
             Nessuna missione presente per il filtro selezionato.
           </div>
         )}
