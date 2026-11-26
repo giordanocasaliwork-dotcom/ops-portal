@@ -350,6 +350,11 @@ export default function DashboardPage() {
     year: 'numeric',
   })
 
+  const opsControlProps = {
+    userEmail: user.email || '',
+    onAuditUpdated: handleControlRoomSync,
+  } as Parameters<typeof OperationsControl>[0]
+
   const sopProps = {
     isAdmin,
     userEmail: user.email || '',
@@ -722,13 +727,7 @@ export default function DashboardPage() {
         )}
 
         {/* 5. DELEGHE, TASK & NOTA SPESE (Solo Admin) */}
-        {isAdmin && (
-          <OperationsControl
-            userEmail={user.email || ''}
-            userId={user.id}
-            onAuditUpdated={handleControlRoomSync}
-          />
-        )}
+        {isAdmin && <OperationsControl {...opsControlProps} />}
 
         {/* 6. PROCEDURE OPERATIVE / SOP (Nascosto all'Executive) */}
         {!isExecutive && <SopChecklists {...sopProps} />}
