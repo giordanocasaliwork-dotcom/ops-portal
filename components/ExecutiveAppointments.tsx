@@ -364,8 +364,8 @@ export default function ExecutiveAppointments({
   }
 
   const statusBadge = (s: ExecutiveAppointment['status']) => {
-    if (s === 'CONFERMATO') return 'bg-emerald-950/90 text-emerald-300 border-emerald-500'
-    if (s === 'DA CONFERMARE') return 'bg-yellow-950/90 text-yellow-300 border-yellow-500'
+    if (s === 'CONFERMATO') return 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+    if (s === 'DA CONFERMARE') return 'bg-amber-950/90 text-amber-300 border-amber-600'
     if (s === 'RINVIATO') return 'bg-red-950/80 text-red-300 border-red-600'
     return 'bg-neutral-800 text-neutral-400 border-neutral-700'
   }
@@ -389,19 +389,19 @@ export default function ExecutiveAppointments({
   })
 
   return (
-    <div className="bg-neutral-900 border-2 border-green-500/80 rounded-lg p-6 shadow-xl space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-green-500/30 pb-4">
+    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-emerald-500 rounded-xl p-4 sm:p-6 shadow-xl space-y-5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-yellow-400 text-neutral-950 text-[10px] font-bold uppercase">
-              RISERVATO DIREZIONE
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase">
+              Direzione
             </span>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-yellow-300">
-              Agenda Appuntamenti &amp; Meeting (Ufficio / Sedi Esterne)
+            <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
+              Agenda Appuntamenti &amp; Meeting
             </h2>
           </div>
-          <p className="text-xs text-neutral-400 mt-1">
-            Calendario incontri direzionali, partecipanti, ordine del giorno e dossier preparatori
+          <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+            Incontri in ufficio o sedi esterne, partecipanti, ordine del giorno e dossier
           </p>
         </div>
 
@@ -412,10 +412,10 @@ export default function ExecutiveAppointments({
               type="button"
               onClick={() => setFilter(tab)}
               className={
-                'px-2.5 py-1 rounded text-[11px] uppercase border transition ' +
+                'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase border transition ' +
                 (filter === tab
-                  ? 'bg-yellow-400 text-neutral-950 border-yellow-400 font-bold'
-                  : 'bg-neutral-950 text-neutral-300 border-neutral-700 hover:border-yellow-500/60')
+                  ? 'bg-emerald-400 text-neutral-950 border-emerald-400 font-bold'
+                  : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
               }
             >
               {tab === 'OGGI' ? `Oggi (${todayCount})` : tab}
@@ -431,15 +431,15 @@ export default function ExecutiveAppointments({
                 setShowForm(true)
               }
             }}
-            className="ml-1 bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded transition"
+            className="min-h-[38px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition"
           >
-            {showForm ? 'Chiudi Modulo' : '+ Nuovo Appuntamento'}
+            {showForm ? 'Chiudi Modulo' : '+ Nuovo Incontro'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-950/50 border border-red-800 text-red-300 text-xs rounded">
+        <div className="p-3.5 bg-red-950/50 border border-red-800 text-red-200 text-sm rounded-lg">
           {error}
         </div>
       )}
@@ -447,15 +447,15 @@ export default function ExecutiveAppointments({
       {showForm && (
         <form
           onSubmit={handleSaveAppointment}
-          className="p-4 bg-neutral-950 border-2 border-emerald-400/80 rounded-lg space-y-4 text-xs"
+          className="p-4 sm:p-5 bg-neutral-950 border border-emerald-500/50 rounded-xl space-y-4 text-sm"
         >
-          <div className="text-xs uppercase tracking-wider text-emerald-300 font-bold">
+          <div className="text-sm uppercase tracking-wider text-emerald-400 font-bold">
             {editingId ? 'Modifica Appuntamento Direzione' : 'Pianifica Nuovo Incontro / Meeting'}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Oggetto / Titolo Incontro *
               </label>
               <input
@@ -463,14 +463,14 @@ export default function ExecutiveAppointments({
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Es. Riunione Strategica / Incontro Avv. Rossi / Board"
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                placeholder="Es. Riunione Strategica / Incontro Avv. Rossi"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                   Inizio *
                 </label>
                 <input
@@ -478,12 +478,12 @@ export default function ExecutiveAppointments({
                   required
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+                <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                   Fine *
                 </label>
                 <input
@@ -491,19 +491,19 @@ export default function ExecutiveAppointments({
                   required
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Tipologia Sede
               </label>
               <select
                 value={locationType}
                 onChange={(e) => setLocationType(e.target.value)}
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               >
                 <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
                 <option value="Sede Esterna / Trasferta">Sede Esterna / Trasferta</option>
@@ -513,20 +513,20 @@ export default function ExecutiveAppointments({
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Indirizzo Esatto / Sala / Piattaforma
               </label>
               <input
                 type="text"
                 value={locationDetails}
                 onChange={(e) => setLocationDetails(e.target.value)}
-                placeholder="Es. Sala Riunioni Direzione / P.le Luigi Sturzo 15 / Link Zoom"
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                placeholder="Es. Sala Riunioni / Via Veneto 12 / Link Zoom"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Partecipanti / Interlocutori
               </label>
               <input
@@ -534,12 +534,12 @@ export default function ExecutiveAppointments({
                 value={participants}
                 onChange={(e) => setParticipants(e.target.value)}
                 placeholder="Nomi, qualifiche e societa presenti"
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Stato Conferma
               </label>
               <select
@@ -549,7 +549,7 @@ export default function ExecutiveAppointments({
                     e.target.value as 'CONFERMATO' | 'DA CONFERMARE' | 'RINVIATO' | 'COMPLETATO'
                   )
                 }
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               >
                 <option value="CONFERMATO">CONFERMATO</option>
                 <option value="DA CONFERMARE">DA CONFERMARE</option>
@@ -559,44 +559,44 @@ export default function ExecutiveAppointments({
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
-                Dettagli Specifici Incontro / Ordine del Giorno
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Ordine del Giorno &amp; Dettagli
               </label>
               <textarea
                 rows={3}
                 value={meetingAgenda}
                 onChange={(e) => setMeetingAgenda(e.target.value)}
-                placeholder="Punti da trattare, obiettivi, decisioni attese, contesto relazionale"
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                placeholder="Punti da trattare, obiettivi, decisioni attese"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase text-neutral-400 mb-1">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Materiali Preparatori &amp; Note Riservate
               </label>
               <textarea
                 rows={3}
                 value={prepNotes}
                 onChange={(e) => setPrepNotes(e.target.value)}
-                placeholder="Documenti da portare, contratti in revisione, punti sensibili da evitare"
-                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded p-2 text-xs text-neutral-100"
+                placeholder="Documenti da portare, contratti in revisione, punti sensibili"
+                className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2.5 pt-2">
             <button
               type="button"
               onClick={resetForm}
-              className="bg-neutral-900 text-neutral-400 border border-neutral-700 text-xs uppercase px-4 py-2 rounded"
+              className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
             >
               Annulla
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs uppercase px-5 py-2 rounded transition disabled:opacity-50"
+              className="min-h-[40px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
             >
               {loading
                 ? 'Salvataggio...'
@@ -609,7 +609,7 @@ export default function ExecutiveAppointments({
       )}
 
       {filteredAppointments.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-3.5">
           {filteredAppointments.map((appt) => {
             const isExpanded = expandedId === appt.id
             const isPhysicalLocation =
@@ -620,31 +620,33 @@ export default function ExecutiveAppointments({
             return (
               <div
                 key={appt.id}
-                className="bg-neutral-950 border-2 border-emerald-500/80 border-l-4 border-l-emerald-400 rounded-lg p-4 space-y-3 text-xs shadow-md"
+                className="bg-neutral-950 border border-neutral-800 border-l-4 border-l-emerald-500 rounded-xl p-4 sm:p-5 space-y-3.5 text-sm shadow-md"
               >
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                  <div className="space-y-1.5">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
+                  <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded bg-emerald-400 text-neutral-950 font-bold text-[11px]">
+                      <span className="px-2.5 py-1 rounded-md bg-emerald-400 text-neutral-950 font-bold font-mono text-xs sm:text-sm">
                         {formatDateTime(appt.start_time)} &rarr; {formatTimeOnly(appt.end_time)}
                       </span>
                       <span
-                        className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${statusBadge(
+                        className={`px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ${statusBadge(
                           appt.status
                         )}`}
                       >
                         {appt.status}
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/50 text-[10px] text-emerald-300 font-semibold uppercase">
+                      <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 font-medium">
                         {appt.location_type}
                       </span>
                     </div>
 
-                    <div className="text-sm font-bold text-neutral-100 pt-0.5">{appt.title}</div>
+                    <div className="text-base sm:text-lg font-bold text-white leading-snug">
+                      {appt.title}
+                    </div>
 
                     {appt.location_details && (
-                      <div className="flex flex-wrap items-center gap-2 text-neutral-300">
-                        <span className="text-neutral-500">Luogo:</span>
+                      <div className="flex flex-wrap items-center gap-2 text-neutral-200 text-sm">
+                        <span className="text-neutral-400">Luogo:</span>
                         <span>{appt.location_details}</span>
                         {isPhysicalLocation && (
                           <a
@@ -653,7 +655,7 @@ export default function ExecutiveAppointments({
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-500/60 transition"
+                            className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
                           >
                             Maps &nearr;
                           </a>
@@ -662,9 +664,9 @@ export default function ExecutiveAppointments({
                     )}
 
                     {appt.participants && (
-                      <div className="text-neutral-400">
-                        <span className="text-neutral-500">Partecipanti:</span>{' '}
-                        <span className="text-neutral-200">{appt.participants}</span>
+                      <div className="text-neutral-300 text-sm">
+                        <span className="text-neutral-400">Partecipanti:</span>{' '}
+                        <span className="text-neutral-100">{appt.participants}</span>
                       </div>
                     )}
                   </div>
@@ -672,9 +674,22 @@ export default function ExecutiveAppointments({
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
                     <button
                       type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : appt.id)}
+                      className={
+                        'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
+                        (isExpanded
+                          ? 'bg-emerald-400 text-neutral-950 border-emerald-400'
+                          : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-700/80')
+                      }
+                    >
+                      {isExpanded ? 'Chiudi Dettagli' : 'Dettagli'}
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleDownloadIcs(appt)}
                       title="Scarica evento per Google Calendar / Apple Calendar"
-                      className="bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-sky-800/80 text-xs px-2.5 py-1.5 rounded transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                     >
                       .ICS
                     </button>
@@ -683,28 +698,15 @@ export default function ExecutiveAppointments({
                       type="button"
                       onClick={() => handlePrintAppointment(appt)}
                       title="Apri versione stampabile / Salva PDF"
-                      className="bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs px-2.5 py-1.5 rounded transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                     >
-                      PDF / Stampa
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : appt.id)}
-                      className={
-                        'px-2.5 py-1.5 rounded text-xs uppercase tracking-wider font-bold border transition ' +
-                        (isExpanded
-                          ? 'bg-emerald-400 text-neutral-950 border-emerald-400'
-                          : 'bg-emerald-950/60 hover:bg-emerald-900/70 text-emerald-300 border-emerald-500/80')
-                      }
-                    >
-                      {isExpanded ? 'Chiudi Dettagli' : 'Dettagli Incontro'}
+                      PDF
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleEditClick(appt)}
-                      className="bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs px-2.5 py-1.5 rounded transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                     >
                       Modifica
                     </button>
@@ -718,7 +720,7 @@ export default function ExecutiveAppointments({
                           e.target.value as ExecutiveAppointment['status']
                         )
                       }
-                      className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs uppercase rounded px-2.5 py-1.5"
+                      className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
                     >
                       <option value="CONFERMATO">Confermato</option>
                       <option value="DA CONFERMARE">Da Confermare</option>
@@ -729,7 +731,7 @@ export default function ExecutiveAppointments({
                     <button
                       type="button"
                       onClick={() => handleDeleteAppointment(appt)}
-                      className="bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1.5 rounded transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                     >
                       Elimina
                     </button>
@@ -737,31 +739,31 @@ export default function ExecutiveAppointments({
                 </div>
 
                 {isExpanded && (
-                  <div className="border-t border-emerald-500/30 pt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="bg-neutral-900/80 border border-emerald-500/40 rounded p-3">
-                      <div className="text-[10px] uppercase text-emerald-300 font-bold mb-1">
+                  <div className="border-t border-neutral-800 pt-3.5 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3.5">
+                      <div className="text-xs uppercase text-emerald-400 font-bold mb-1.5">
                         Ordine del Giorno &amp; Dettagli Specifici
                       </div>
-                      <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
+                      <div className="text-neutral-100 text-sm whitespace-pre-line leading-relaxed">
                         {appt.meeting_agenda || 'Nessun dettaglio specifico inserito.'}
                       </div>
                     </div>
 
-                    <div className="bg-neutral-900/80 border border-neutral-800 rounded p-3 flex flex-col justify-between gap-2">
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3.5 flex flex-col justify-between gap-3">
                       <div>
-                        <div className="text-[10px] uppercase text-yellow-300 font-bold mb-1">
+                        <div className="text-xs uppercase text-amber-400 font-bold mb-1.5">
                           Materiali &amp; Note Preparatorie
                         </div>
-                        <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
+                        <div className="text-neutral-100 text-sm whitespace-pre-line leading-relaxed">
                           {appt.prep_notes || 'Nessuna nota preparatoria allegata.'}
                         </div>
                       </div>
 
-                      <div className="flex justify-end pt-2">
+                      <div className="flex justify-end pt-1">
                         <button
                           type="button"
                           onClick={() => handleCopySummary(appt)}
-                          className="bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-500/70 text-[11px] uppercase px-3 py-1 rounded transition"
+                          className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 text-xs font-bold uppercase px-3.5 py-1.5 rounded-lg transition"
                         >
                           {copiedId === appt.id ? 'Scheda Copiata' : 'Copia Scheda Incontro'}
                         </button>
@@ -774,7 +776,7 @@ export default function ExecutiveAppointments({
           })}
         </div>
       ) : (
-        <div className="py-6 text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-lg">
+        <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
           Nessun appuntamento in agenda per questo filtro.
         </div>
       )}
