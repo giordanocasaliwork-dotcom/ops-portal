@@ -594,43 +594,33 @@ export default function DashboardPage() {
                       Appuntamenti &amp; Meeting Oggi ({todayAppointments.length})
                     </div>
                     {todayAppointments.length > 0 ? (
-                      todayAppointments.map((appt) => {
-                        const apptFields = appt as unknown as Record<string, string | null | undefined>
-                        const locationVal =
-                          apptFields.location ||
-                          apptFields.location_or_link ||
-                          apptFields.venue ||
-                          apptFields.place
-                        const participantsVal =
-                          apptFields.participants ||
-                          apptFields.attendees ||
-                          apptFields.counterpart
-
-                        return (
-                          <div
-                            key={appt.id}
-                            className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-amber-200">
-                                {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
-                              </span>
-                              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
-                                {appt.status}
-                              </span>
-                            </div>
-                            <div className="font-semibold text-neutral-100">{appt.title}</div>
-                            {locationVal && (
-                              <div className="text-neutral-400 text-[11px]">Luogo: {locationVal}</div>
-                            )}
-                            {participantsVal && (
-                              <div className="text-neutral-400 text-[11px]">
-                                Partecipanti: {participantsVal}
-                              </div>
-                            )}
+                      todayAppointments.map((appt) => (
+                        <div
+                          key={appt.id}
+                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-amber-200">
+                              {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
+                            </span>
+                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
+                              {appt.status}
+                            </span>
                           </div>
-                        )
-                      })
+                          <div className="font-semibold text-neutral-100">{appt.title}</div>
+                          {(appt.location_type || appt.location_details) && (
+                            <div className="text-neutral-400 text-[11px]">
+                              Luogo: {appt.location_type}
+                              {appt.location_details ? ` — ${appt.location_details}` : ''}
+                            </div>
+                          )}
+                          {appt.participants && (
+                            <div className="text-neutral-400 text-[11px]">
+                              Partecipanti: {appt.participants}
+                            </div>
+                          )}
+                        </div>
+                      ))
                     ) : (
                       <div className="text-neutral-500 text-[11px]">
                         Nessun meeting in agenda per oggi.
@@ -682,7 +672,6 @@ export default function DashboardPage() {
         {/* 1. AGENDA APPUNTAMENTI & MEETING (Visibile a Admin ed Executive) */}
         {canAccessExecutivePanels && (
           <ExecutiveAppointments
-            isAdmin={isAdmin}
             userEmail={user.email || ''}
             userId={user.id}
             onAuditUpdated={handleControlRoomSync}
@@ -714,9 +703,7 @@ export default function DashboardPage() {
         {/* 4. GATEKEEPING, RUBRICA STRATEGICA & PREFERENZE VIP (Visibile a Admin ed Executive) */}
         {canAccessExecutivePanels && (
           <ExecutiveHub
-            isAdmin={isAdmin}
             userEmail={user.email || ''}
-            userId={user.id}
             onAuditUpdated={handleControlRoomSync}
           />
         )}
