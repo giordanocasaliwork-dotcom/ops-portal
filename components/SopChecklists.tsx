@@ -187,7 +187,7 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
   )
 
   return (
-    <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl space-y-5">
+    <div className="bg-neutral-900 border-2 border-lime-400/80 rounded-lg p-6 shadow-xl space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-yellow-500/30 pb-4">
         <div>
           <div className="flex items-center gap-2">
