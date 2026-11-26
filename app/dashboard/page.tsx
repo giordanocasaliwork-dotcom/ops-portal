@@ -299,7 +299,7 @@ export default function DashboardPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-400 p-8 font-mono text-xs">
+      <div className="min-h-screen bg-neutral-950 text-neutral-300 p-6 font-sans text-sm">
         Verifica clearance e caricamento area operativa...
       </div>
     )
@@ -369,25 +369,27 @@ export default function DashboardPage() {
   } as Parameters<typeof BackupManager>[0]
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-3.5 sm:p-6 md:p-8 font-sans antialiased">
+      <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
         {isAdmin && activeSosBanner && (
-          <div className="bg-red-950/90 border-2 border-red-500 rounded-lg p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[11px] font-bold uppercase animate-pulse">
+          <div className="bg-red-950/90 border-2 border-red-500 rounded-xl p-4 sm:p-5 shadow-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded bg-red-600 text-white text-xs font-bold uppercase animate-pulse">
                   ALLERTA EMERGENZA SOS
                 </span>
-                <span className="text-xs text-red-200">
+                <span className="text-xs sm:text-sm font-mono text-red-200">
                   {activeSosBanner.created_at
                     ? new Date(activeSosBanner.created_at).toLocaleString('it-IT')
                     : ''}
                 </span>
               </div>
-              <div className="text-xs font-semibold text-white">{activeSosBanner.action}</div>
+              <div className="text-sm sm:text-base font-semibold text-white">
+                {activeSosBanner.action}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {activeSosCoords && (
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -395,7 +397,7 @@ export default function DashboardPage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="bg-white hover:bg-neutral-200 text-red-950 font-bold text-xs uppercase px-3 py-1.5 rounded transition"
+                  className="min-h-[40px] inline-flex items-center bg-white hover:bg-neutral-200 text-red-950 font-bold text-xs sm:text-sm uppercase px-4 py-2 rounded-lg transition"
                 >
                   Posizione SOS Maps &nearr;
                 </a>
@@ -404,7 +406,7 @@ export default function DashboardPage() {
                 type="button"
                 disabled={archivingSos}
                 onClick={() => handleArchiveSosBanner(activeSosBanner)}
-                className="bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-600 text-xs uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+                className="min-h-[40px] bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-600 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg transition disabled:opacity-50"
               >
                 {archivingSos ? 'Archiviazione...' : 'Archivia Allerta'}
               </button>
@@ -412,26 +414,27 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-yellow-500/30 pb-4">
+        {/* INTESTAZIONE PRINCIPALE & KPI */}
+        <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-amber-500 rounded-xl p-4 sm:p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-800 pb-4">
             <div>
-              <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
+              <h1 className="text-lg sm:text-2xl font-bold tracking-wide uppercase text-white">
                 {isExecutive ? 'Ops Portal • Area Riservata Direzione' : 'Ops Portal • Dashboard'}
               </h1>
-              <p className="text-xs text-neutral-400 mt-1">
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
                 {isExecutive
                   ? 'Agenda Appuntamenti & Rubrica Strategica • Connessione Sicura'
-                  : 'Area Operativa Riservata • Connessione Sicura'}
+                  : 'Control Room Operativa • Connessione Sicura'}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 disabled={sendingGlobalSos}
                 onClick={handleGlobalSos}
                 title="Doppio tocco rapido per inviare un allarme SOS con posizione GPS"
                 className={
-                  'text-xs uppercase tracking-wider px-4 py-2 rounded transition font-bold border ' +
+                  'min-h-[40px] text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition font-bold border ' +
                   (globalSosConfirm
                     ? 'bg-red-600 hover:bg-red-500 text-white border-red-300 animate-pulse shadow-lg shadow-red-950'
                     : 'bg-red-950/90 hover:bg-red-900 text-red-200 border-red-700') +
@@ -448,11 +451,11 @@ export default function DashboardPage() {
               {isAdmin && (
                 <button
                   onClick={() => router.push('/team')}
-                  className="bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700 text-xs uppercase tracking-wider px-4 py-2 rounded transition font-semibold flex items-center gap-2"
+                  className="min-h-[40px] bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-neutral-700 text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition font-semibold flex items-center gap-2"
                 >
                   <span>Gestione Team</span>
                   {pendingUsersCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-yellow-400 text-neutral-950 text-[10px] font-bold animate-pulse">
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-neutral-950 text-xs font-bold animate-pulse">
                       +{pendingUsersCount}
                     </span>
                   )}
@@ -460,7 +463,7 @@ export default function DashboardPage() {
               )}
               <button
                 onClick={handleSignOut}
-                className="bg-neutral-950 hover:bg-red-950/60 text-neutral-300 hover:text-red-300 border border-neutral-700 hover:border-red-800 text-xs uppercase tracking-wider px-4 py-2 rounded transition"
+                className="min-h-[40px] bg-neutral-950 hover:bg-red-950/60 text-neutral-300 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition"
               >
                 Disconnetti
               </button>
@@ -468,18 +471,18 @@ export default function DashboardPage() {
           </div>
 
           {globalSosError && (
-            <div className="mt-4 p-3 bg-red-950/70 border border-red-700 text-red-200 text-xs rounded">
+            <div className="mt-4 p-3.5 bg-red-950/70 border border-red-700 text-red-200 text-sm rounded-lg">
               {globalSosError}
             </div>
           )}
 
           {globalSosSent && (
-            <div className="mt-4 p-3 bg-red-950/60 border border-red-700 rounded flex flex-wrap items-center justify-between gap-2 text-xs text-red-200">
+            <div className="mt-4 p-3.5 bg-red-950/60 border border-red-700 rounded-lg flex flex-wrap items-center justify-between gap-2 text-sm text-red-200">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold uppercase text-[10px]">
+                <span className="px-2.5 py-0.5 rounded bg-red-600 text-white font-bold uppercase text-xs">
                   SOS TRASMESSO ({globalSosSent.time})
                 </span>
-                <span>
+                <span className="font-mono text-xs sm:text-sm">
                   {globalSosSent.coords
                     ? `Coordinate: ${globalSosSent.coords} (${globalSosSent.accuracy}m)`
                     : 'Posizione GPS non disponibile'}
@@ -500,7 +503,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setGlobalSosSent(null)}
-                className="text-[11px] uppercase text-red-300 hover:text-white"
+                className="text-xs uppercase text-red-300 hover:text-white font-semibold"
               >
                 Chiudi
               </button>
@@ -509,60 +512,70 @@ export default function DashboardPage() {
 
           <div
             className={
-              'grid grid-cols-1 gap-4 pt-4 text-xs ' +
+              'grid grid-cols-1 gap-3 sm:gap-4 pt-4 ' +
               (isExecutive ? 'sm:grid-cols-2' : 'sm:grid-cols-3')
             }
           >
-            <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
-              <span className="text-neutral-500 block mb-1">ACCOUNT CONNESSO</span>
-              <span className="text-neutral-200 font-semibold">{user.email}</span>
+            <div className="bg-neutral-950 p-3.5 rounded-lg border border-neutral-800">
+              <span className="text-neutral-400 text-xs uppercase tracking-wider block mb-1">
+                Account Connesso
+              </span>
+              <span className="text-neutral-100 text-sm sm:text-base font-semibold break-all">
+                {user.email}
+              </span>
             </div>
-            <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
-              <span className="text-neutral-500 block mb-1">LIVELLO ACCESSO</span>
-              <span className="text-emerald-400 font-semibold uppercase">
+            <div className="bg-neutral-950 p-3.5 rounded-lg border border-neutral-800">
+              <span className="text-neutral-400 text-xs uppercase tracking-wider block mb-1">
+                Livello Accesso
+              </span>
+              <span className="text-amber-400 text-sm sm:text-base font-bold uppercase">
                 {role}
                 {callsign ? ` • ${callsign}` : ''}
               </span>
             </div>
             {!isExecutive && (
-              <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
-                <span className="text-neutral-500 block mb-1">STATO PORTALE</span>
-                <span className="text-emerald-400 font-semibold">OPERATIVO</span>
+              <div className="bg-neutral-950 p-3.5 rounded-lg border border-neutral-800">
+                <span className="text-neutral-400 text-xs uppercase tracking-wider block mb-1">
+                  Stato Portale
+                </span>
+                <span className="text-emerald-400 text-sm sm:text-base font-bold">OPERATIVO</span>
               </div>
             )}
           </div>
 
           {isAdmin && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-3 sm:pt-4">
               <button
                 type="button"
                 onClick={() => setShowTodayFocus(!showTodayFocus)}
                 className={
-                  'text-left p-3 rounded border transition ' +
+                  'text-left p-3.5 rounded-lg border transition ' +
                   (showTodayFocus
-                    ? 'bg-sky-950/60 border-sky-500'
-                    : 'bg-neutral-950 border-sky-900/70 hover:border-sky-600')
+                    ? 'bg-neutral-800/80 border-amber-500'
+                    : 'bg-neutral-950 border-neutral-800 hover:border-amber-500/70')
                 }
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-neutral-500 uppercase">AGENDA OGGI (APPUNT. + MOV.)</span>
-                  <span className="text-[10px] uppercase text-sky-400 font-bold">
-                    {showTodayFocus ? 'Chiudi ▲' : 'Dettagli ▼'}
+                  <span className="text-neutral-400 text-xs uppercase tracking-wider">
+                    Agenda Oggi (Appunt. + Mov.)
+                  </span>
+                  <span className="text-xs uppercase text-amber-400 font-bold">
+                    {showTodayFocus ? 'Chiudi ▲' : 'Apri ▼'}
                   </span>
                 </div>
-                <span className="text-sky-300 font-bold text-sm">
+                <span className="text-white font-bold text-base sm:text-lg">
                   {todayEventsCount} {todayEventsCount === 1 ? 'evento attivo' : 'eventi attivi'}
                 </span>
               </button>
 
-              <div className="bg-neutral-950 p-3 rounded border border-amber-900/70">
-                <span className="text-neutral-500 block mb-1 uppercase">
-                  PRIORIT&Agrave; &amp; SCADENZE URGENTI
+              <div className="bg-neutral-950 p-3.5 rounded-lg border border-neutral-800">
+                <span className="text-neutral-400 text-xs uppercase tracking-wider block mb-1">
+                  Priorit&agrave; &amp; Scadenze Urgenti
                 </span>
                 <span
                   className={
-                    'font-bold text-sm ' +
-                    (urgentTasksCount > 0 ? 'text-amber-300' : 'text-emerald-400')
+                    'font-bold text-base sm:text-lg ' +
+                    (urgentTasksCount > 0 ? 'text-amber-400' : 'text-emerald-400')
                   }
                 >
                   {urgentTasksCount}{' '}
@@ -570,11 +583,11 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              <div className="bg-neutral-950 p-3 rounded border border-emerald-900/70">
-                <span className="text-neutral-500 block mb-1 uppercase">
-                  NOTA SPESE DA RENDICONTARE
+              <div className="bg-neutral-950 p-3.5 rounded-lg border border-neutral-800">
+                <span className="text-neutral-400 text-xs uppercase tracking-wider block mb-1">
+                  Nota Spese da Rendicontare
                 </span>
-                <span className="text-emerald-300 font-bold text-sm">
+                <span className="text-neutral-100 font-bold text-base sm:text-lg font-mono">
                   &euro; {pendingExpensesSum.toFixed(2)}
                 </span>
               </div>
@@ -582,101 +595,101 @@ export default function DashboardPage() {
           )}
 
           {isAdmin && showTodayFocus && (
-            <div className="mt-4 bg-neutral-950 border border-sky-700/80 rounded-lg p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-900/60 pb-2.5">
+            <div className="mt-4 bg-neutral-950 border border-amber-500/60 rounded-xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                  <div className="text-sm sm:text-base font-bold uppercase tracking-wide text-amber-400">
                     Agenda Odierna — {todayFormattedDate}
                   </div>
-                  <p className="text-[11px] text-neutral-400">
+                  <p className="text-xs sm:text-sm text-neutral-400">
                     Riepilogo rapido degli appuntamenti e movimentazioni programmate per oggi
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowTodayFocus(false)}
-                  className="text-[11px] uppercase px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700"
+                  className="min-h-[36px] text-xs uppercase px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 font-semibold"
                 >
                   Chiudi Vista Rapida
                 </button>
               </div>
 
               {todayEventsCount === 0 ? (
-                <div className="text-xs text-neutral-400 py-2">
+                <div className="text-sm text-neutral-400 py-2">
                   Nessun appuntamento o movimentazione attiva programmata per la giornata odierna.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-2">
-                    <div className="text-[11px] uppercase font-bold text-amber-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2.5">
+                    <div className="text-xs uppercase font-bold tracking-wider text-amber-400">
                       Appuntamenti &amp; Meeting Oggi ({todayAppointments.length})
                     </div>
                     {todayAppointments.length > 0 ? (
                       todayAppointments.map((appt) => (
                         <div
                           key={appt.id}
-                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                          className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-amber-200">
+                            <span className="font-bold font-mono text-amber-300">
                               {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
                             </span>
-                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
+                            <span className="text-xs uppercase px-2 py-0.5 rounded bg-neutral-800 text-amber-300 font-semibold">
                               {appt.status}
                             </span>
                           </div>
-                          <div className="font-semibold text-neutral-100">{appt.title}</div>
+                          <div className="font-bold text-base text-white">{appt.title}</div>
                           {(appt.location_type || appt.location_details) && (
-                            <div className="text-neutral-400 text-[11px]">
+                            <div className="text-neutral-300 text-xs sm:text-sm">
                               Luogo: {appt.location_type}
                               {appt.location_details ? ` — ${appt.location_details}` : ''}
                             </div>
                           )}
                           {appt.participants && (
-                            <div className="text-neutral-400 text-[11px]">
+                            <div className="text-neutral-400 text-xs sm:text-sm">
                               Partecipanti: {appt.participants}
                             </div>
                           )}
                         </div>
                       ))
                     ) : (
-                      <div className="text-neutral-500 text-[11px]">
+                      <div className="text-neutral-500 text-sm">
                         Nessun meeting in agenda per oggi.
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-[11px] uppercase font-bold text-emerald-300">
+                  <div className="space-y-2.5">
+                    <div className="text-xs uppercase font-bold tracking-wider text-emerald-400">
                       Movimentazioni &amp; Trasferte Oggi ({todayActiveMissions.length})
                     </div>
                     {todayActiveMissions.length > 0 ? (
                       todayActiveMissions.map((m) => (
                         <div
                           key={m.id}
-                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                          className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-emerald-200">
+                            <span className="font-bold font-mono text-emerald-300">
                               {formatTimeHour(m.start_time)} &rarr; {formatTimeHour(m.end_time)}
                             </span>
-                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800">
+                            <span className="text-xs uppercase px-2 py-0.5 rounded bg-neutral-800 text-emerald-300 font-semibold">
                               {m.status}
                             </span>
                           </div>
-                          <div className="font-semibold text-neutral-100 uppercase">
+                          <div className="font-bold text-base text-white uppercase">
                             {m.client_vip}
                           </div>
-                          <div className="text-neutral-300 text-[11px]">
+                          <div className="text-neutral-200 text-xs sm:text-sm">
                             {m.pickup_point} &rarr; {m.dropoff_point}
                           </div>
-                          <div className="text-neutral-400 text-[11px]">
+                          <div className="text-neutral-400 text-xs sm:text-sm">
                             Mezzo: {m.assigned_vehicle}
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="text-neutral-500 text-[11px]">
+                      <div className="text-neutral-500 text-sm">
                         Nessuna movimentazione programmata per oggi.
                       </div>
                     )}
@@ -687,7 +700,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 1. AGENDA APPUNTAMENTI & MEETING (Visibile a Admin ed Executive) */}
+        {/* 1. AGENDA APPUNTAMENTI & MEETING */}
         {canAccessExecutivePanels && (
           <ExecutiveAppointments
             userEmail={user.email || ''}
@@ -696,7 +709,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* 2. METEO LOCALE, TRATTE & EARLY WARNING CALAMITA (Solo Admin) */}
+        {/* 2. METEO LOCALE, TRATTE & EARLY WARNING CALAMITA */}
         {isAdmin && (
           <AdminWeatherHazardPanel
             isAdmin={isAdmin}
@@ -707,7 +720,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* 3. AGENDA DIREZIONALE, FLOTTA & RISK ASSESSMENT (Nascosto all'Executive) */}
+        {/* 3. AGENDA DIREZIONALE, FLOTTA & RISK ASSESSMENT */}
         {!isExecutive && (
           <MissionBoard
             initialMissions={missions}
@@ -718,7 +731,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* 4. GATEKEEPING, RUBRICA STRATEGICA & PREFERENZE VIP (Visibile a Admin ed Executive) */}
+        {/* 4. GATEKEEPING, RUBRICA STRATEGICA & PREFERENZE VIP */}
         {canAccessExecutivePanels && (
           <ExecutiveHub
             userEmail={user.email || ''}
@@ -726,36 +739,36 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* 5. DELEGHE, TASK & NOTA SPESE (Solo Admin) */}
+        {/* 5. DELEGHE, TASK & NOTA SPESE */}
         {isAdmin && <OperationsControl {...opsControlProps} />}
 
-        {/* 6. PROCEDURE OPERATIVE / SOP (Nascosto all'Executive) */}
+        {/* 6. PROCEDURE OPERATIVE / SOP */}
         {!isExecutive && <SopChecklists {...sopProps} />}
 
-        {/* 7. BACKUP & RIPRISTINO (Solo Admin) */}
+        {/* 7. BACKUP & RIPRISTINO */}
         {isAdmin && <BackupManager {...backupProps} />}
 
-        {/* 8. LOG ATTIVITA' (Solo Admin) */}
+        {/* 8. LOG ATTIVITA' */}
         {isAdmin && (
-          <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl">
-            <div className="flex items-center justify-between border-b border-yellow-500/30 pb-3 mb-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
-                Log Attivit&agrave; di Sistema, Check-in &amp; Allerte (Solo Admin)
+          <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-neutral-500 rounded-xl p-4 sm:p-6 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3.5 mb-4">
+              <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
+                Audit Log • Ultimi Accessi &amp; Attivit&agrave;
               </h2>
-              <span className="text-[11px] text-neutral-500">Aggiornamento automatico</span>
+              <span className="text-xs text-neutral-400">Aggiornamento automatico</span>
             </div>
             {logs.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="text-neutral-500 border-b border-neutral-800 uppercase">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="text-neutral-400 border-b border-neutral-800 uppercase text-xs">
                     <tr>
-                      <th className="py-2 pr-4">Data / Ora</th>
-                      <th className="py-2 pr-4">Operatore</th>
-                      <th className="py-2 pr-4">Evento / Coordinate</th>
-                      <th className="py-2">Stato</th>
+                      <th className="py-2.5 pr-4">Data / Ora</th>
+                      <th className="py-2.5 pr-4">Operatore</th>
+                      <th className="py-2.5 pr-4">Evento / Coordinate</th>
+                      <th className="py-2.5">Stato</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-800/60">
+                  <tbody className="divide-y divide-neutral-800/70">
                     {logs.map((item: any, idx: number) => {
                       const isSos = item.status === 'SOS'
                       const isSosAck = item.status === 'SOS-ACK'
@@ -772,16 +785,16 @@ export default function DashboardPage() {
                               ? 'bg-neutral-900/60 text-neutral-400'
                               : isCheckIn
                               ? 'bg-sky-950/20 text-sky-200'
-                              : 'text-neutral-300'
+                              : 'text-neutral-200'
                           }
                         >
-                          <td className="py-2 pr-4 whitespace-nowrap">
+                          <td className="py-3 pr-4 whitespace-nowrap font-mono text-xs">
                             {item.created_at
                               ? new Date(item.created_at).toLocaleString('it-IT')
                               : '-'}
                           </td>
-                          <td className="py-2 pr-4">{item.user_email}</td>
-                          <td className="py-2 pr-4">
+                          <td className="py-3 pr-4">{item.user_email}</td>
+                          <td className="py-3 pr-4">
                             <span>{item.action}</span>
                             {gpsCoords && (
                               <a
@@ -791,10 +804,10 @@ export default function DashboardPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={
-                                  'ml-2 underline text-[11px] font-semibold ' +
+                                  'ml-2 underline text-xs font-bold ' +
                                   (isSos
                                     ? 'text-red-300 hover:text-white'
-                                    : 'text-sky-400 hover:text-sky-200')
+                                    : 'text-amber-400 hover:text-amber-200')
                                 }
                               >
                                 Maps &nearr;
@@ -803,7 +816,7 @@ export default function DashboardPage() {
                           </td>
                           <td
                             className={
-                              'py-2 font-bold ' +
+                              'py-3 font-bold uppercase text-xs ' +
                               (isSos
                                 ? 'text-red-400'
                                 : isSosAck
@@ -822,7 +835,7 @@ export default function DashboardPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-xs text-neutral-500">Nessun evento registrato nel log.</p>
+              <p className="text-sm text-neutral-400">Nessun evento registrato nel log.</p>
             )}
           </div>
         )}
