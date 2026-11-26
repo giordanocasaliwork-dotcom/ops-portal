@@ -84,7 +84,7 @@ interface CachedEnvEntry {
 }
 
 const ENV_CACHE_STORAGE_KEY = 'ops_env_feed_cache_v2'
-const ENV_CACHE_TTL_MS = 15 * 60 * 1000 // 15 minuti di cache locale anti-429
+const ENV_CACHE_TTL_MS = 15 * 60 * 1000
 
 function getCoordCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)}_${lng.toFixed(2)}`
@@ -377,7 +377,6 @@ export default function AdminWeatherHazardPanel({
     []
   )
 
-  // Recupera meteo + sismica per tutte le coordinate richieste usando cache 15 min + singola chiamata batch Open-Meteo
   const fetchPointsBatch = useCallback(
     async (
       points: Array<{ key: string; lat: number; lng: number }>,
@@ -404,7 +403,6 @@ export default function AdminWeatherHazardPanel({
         return { dataMap, usedCacheFallback: false, rateLimited: false }
       }
 
-      // Se siamo in finestra di rate-limit (429 recente), usa eventuali dati in cache anche se > 15 min
       if (now < rateLimitUntilRef.current) {
         for (const pt of toFetch) {
           const stale = envCacheRef.current[pt.key]
@@ -424,7 +422,7 @@ export default function AdminWeatherHazardPanel({
       const meteoRes = await fetch(batchUrl)
 
       if (meteoRes.status === 429) {
-        rateLimitUntilRef.current = Date.now() + 5 * 60 * 1000 // pausa 5 min su 429
+        rateLimitUntilRef.current = Date.now() + 5 * 60 * 1000
         for (const pt of toFetch) {
           const stale = envCacheRef.current[pt.key]
           if (stale) dataMap.set(pt.key, stale)
@@ -810,7 +808,6 @@ export default function AdminWeatherHazardPanel({
     )
   }, [persistAdminLocation, refreshEnvironmentalData])
 
-  // Inizializza una sola volta al mount usando la cache locale se fresca
   useEffect(() => {
     if (!isAdmin || initializedRef.current) return
     initializedRef.current = true
@@ -864,7 +861,6 @@ export default function AdminWeatherHazardPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, userId])
 
-  // Aggiorna tratte solo se cambiano le missioni attive (sfruttando comunque la cache 15 min)
   useEffect(() => {
     if (!isAdmin || !initializedRef.current) return
     if (!activeMissionsSignature) {
@@ -875,7 +871,6 @@ export default function AdminWeatherHazardPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMissionsSignature])
 
-  // Auto-refresh ogni 15 minuti
   useEffect(() => {
     if (!isAdmin) return
     const interval = setInterval(() => {
@@ -917,27 +912,27 @@ export default function AdminWeatherHazardPanel({
   if (!isAdmin) return null
 
   return (
-    <div className="bg-neutral-900 border-2 border-sky-500/70 rounded-lg p-5 space-y-4">
-      <div className="flex flex-col gap-3 border-b border-sky-500/30 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-sky-500 rounded-xl p-4 sm:p-6 shadow-xl space-y-5">
+      <div className="flex flex-col gap-3.5 border-b border-neutral-800 pb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase shrink-0">
-              SOLO ADMIN
+            <span className="px-2.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/40 text-xs font-bold uppercase shrink-0">
+              Solo Admin
             </span>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
+            <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
               Meteo Locale, Tratte Missioni &amp; Early Warning Calamita
             </h2>
             <span
               className={
-                'px-2 py-0.5 rounded border text-[10px] uppercase font-bold shrink-0 ' +
+                'px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold shrink-0 ' +
                 (activeAlerts.length > 0
                   ? 'bg-red-950 text-red-300 border-red-600'
                   : 'bg-emerald-950/70 text-emerald-300 border-emerald-700')
               }
             >
               {activeAlerts.length > 0
-                ? `${activeAlerts.length} ALLERTE ATTIVE`
-                : 'NESSUNA CRITICITA'}
+                ? `${activeAlerts.length} Allerte Attive`
+                : 'Nessuna Criticita'}
             </span>
           </div>
 
@@ -946,16 +941,16 @@ export default function AdminWeatherHazardPanel({
               type="button"
               disabled={loadingGps}
               onClick={detectCurrentPosition}
-              className="shrink-0 bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+              className="min-h-[38px] shrink-0 bg-sky-400 hover:bg-sky-300 text-neutral-950 font-bold text-xs uppercase px-3.5 py-1.5 rounded-lg transition disabled:opacity-50"
             >
-              {loadingGps ? 'Rilevamento GPS...' : 'Aggiorna Posizione GPS'}
+              {loadingGps ? 'Rilevamento GPS...' : 'Aggiorna GPS'}
             </button>
 
             <button
               type="button"
               disabled={checkingFeed}
               onClick={() => refreshEnvironmentalData(coordsRef.current, true)}
-              className="shrink-0 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 text-[11px] uppercase px-3 py-1.5 rounded transition disabled:opacity-50"
+              className="min-h-[38px] shrink-0 bg-neutral-950 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition disabled:opacity-50"
             >
               {checkingFeed ? 'Controllo...' : 'Aggiorna Meteo/Sisma'}
             </button>
@@ -963,16 +958,16 @@ export default function AdminWeatherHazardPanel({
             <button
               type="button"
               onClick={handleTriggerTestAlert}
-              className="shrink-0 bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-[11px] uppercase px-3 py-1.5 rounded transition"
+              className="min-h-[38px] shrink-0 bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
             >
               Test Alert Telegram
             </button>
           </div>
         </div>
 
-        <p className="text-xs text-neutral-400">
+        <p className="text-xs sm:text-sm text-neutral-400">
           Posizione Admin:{' '}
-          <strong className="text-neutral-200">
+          <strong className="text-neutral-100">
             {coords
               ? `${coords.label} (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
               : 'In attesa di GPS...'}
@@ -984,96 +979,94 @@ export default function AdminWeatherHazardPanel({
       </div>
 
       {statusBanner && (
-        <div className="p-2.5 bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs rounded">
+        <div className="p-3.5 bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-sm rounded-xl">
           {statusBanner}
         </div>
       )}
 
       {feedNotice && (
-        <div className="p-2.5 bg-amber-950/50 border border-amber-700/80 text-amber-200 text-xs rounded">
+        <div className="p-3.5 bg-amber-950/50 border border-amber-700/80 text-amber-200 text-sm rounded-xl">
           {feedNotice}
         </div>
       )}
 
       {panelError && (
-        <div className="p-2.5 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded">
+        <div className="p-3.5 bg-red-950/60 border border-red-800 text-red-200 text-sm rounded-xl">
           {panelError}
         </div>
       )}
 
       {activeAlerts.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {activeAlerts.map((alert) => (
             <div
               key={alert.key}
               className={
-                'p-3 rounded-lg border text-xs space-y-1 ' +
+                'p-4 rounded-xl border text-sm space-y-1.5 ' +
                 (alert.severity === 'CRITICAL'
                   ? 'bg-red-950/80 border-red-600 text-red-200'
                   : 'bg-amber-950/70 border-amber-600 text-amber-200')
               }
             >
-              <div className="flex items-center justify-between gap-2 font-bold uppercase">
-                <span>
-                  [{alert.severity}] {alert.category} — {alert.title}
-                </span>
+              <div className="font-bold uppercase">
+                [{alert.severity}] {alert.category} — {alert.title}
               </div>
-              <div className="text-neutral-200">{alert.details}</div>
+              <div className="text-neutral-100 leading-relaxed">{alert.details}</div>
             </div>
           ))}
         </div>
       )}
 
       {weather ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Condizioni (Tu)</div>
-            <div className="text-neutral-100 font-semibold mt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">Condizioni (Tu)</div>
+            <div className="text-white text-sm sm:text-base font-bold mt-1">
               {getWeatherDescription(weather.weatherCode)}
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Temperatura</div>
-            <div className="text-neutral-100 font-bold text-sm mt-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">Temperatura</div>
+            <div className="text-white font-bold font-mono text-base mt-1">
               {weather.temperature}°C{' '}
-              <span className="text-[11px] font-normal text-neutral-400">
+              <span className="text-xs font-sans font-normal text-neutral-400 block sm:inline">
                 (perc. {weather.apparentTemperature}°C)
               </span>
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Pioggia / 12h</div>
-            <div className="text-neutral-100 font-semibold mt-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">Pioggia / 12h</div>
+            <div className="text-white font-semibold font-mono text-sm sm:text-base mt-1">
               {weather.rainNow} mm/h •{' '}
-              <span className="text-sky-300">{weather.sumRain12h.toFixed(1)} mm</span>
+              <span className="text-sky-300 font-bold">{weather.sumRain12h.toFixed(1)} mm</span>
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Neve / 12h</div>
-            <div className="text-neutral-100 font-semibold mt-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">Neve / 12h</div>
+            <div className="text-white font-semibold font-mono text-sm sm:text-base mt-1">
               {weather.snowfallNow} cm/h •{' '}
-              <span className="text-sky-200">{weather.sumSnow12h.toFixed(1)} cm</span>
+              <span className="text-sky-200 font-bold">{weather.sumSnow12h.toFixed(1)} cm</span>
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">Raffiche Vento</div>
-            <div className="text-neutral-100 font-semibold mt-1">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">Raffiche Vento</div>
+            <div className="text-white font-semibold font-mono text-sm sm:text-base mt-1">
               {weather.windGustsNow} km/h{' '}
-              <span className="text-[11px] font-normal text-neutral-400">
+              <span className="text-xs font-sans font-normal text-neutral-400 block sm:inline">
                 (max {weather.maxGusts12h})
               </span>
             </div>
           </div>
 
-          <div className="bg-neutral-950 border border-neutral-800 rounded p-3">
-            <div className="text-[10px] uppercase text-neutral-500 font-bold">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-semibold">
               Sismica (100 km / 24h)
             </div>
-            <div className="text-neutral-100 font-semibold mt-1">
+            <div className="text-white font-semibold text-sm sm:text-base mt-1">
               {quakeFeedStatus === 'unavailable'
                 ? 'Feed USGS in attesa'
                 : quakes.length > 0
@@ -1083,18 +1076,18 @@ export default function AdminWeatherHazardPanel({
           </div>
         </div>
       ) : (
-        <div className="text-xs text-neutral-500 py-1">
-          Clicca &quot;Aggiorna Posizione GPS&quot; per attivare il monitoraggio locale sulla tua posizione.
+        <div className="text-sm text-neutral-400 py-1">
+          Clicca &quot;Aggiorna GPS&quot; per attivare il monitoraggio locale sulla tua posizione.
         </div>
       )}
 
       {missionSummaries.length > 0 && (
-        <div className="border-t border-neutral-800 pt-3 space-y-2">
-          <div className="text-[11px] uppercase tracking-wider font-bold text-sky-300">
+        <div className="border-t border-neutral-800 pt-4 space-y-3">
+          <div className="text-xs sm:text-sm uppercase tracking-wider font-bold text-sky-400">
             Monitoraggio Meteo &amp; Sismica — Tratte Missioni Pianificate / In Corso
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
             {missionSummaries.map(({ mission, pickupReport, dropoffReport, alerts }) => {
               const hasAlert = alerts.length > 0
               const renderEndpointLine = (
@@ -1104,8 +1097,8 @@ export default function AdminWeatherHazardPanel({
               ) => {
                 if (!rep) {
                   return (
-                    <div className="text-neutral-500">
-                      <span className="text-neutral-400 font-semibold">{roleLabel}:</span>{' '}
+                    <div className="text-neutral-400 text-xs sm:text-sm">
+                      <span className="text-neutral-300 font-semibold">{roleLabel}:</span>{' '}
                       {rawPoint} (coordinate non risolte)
                     </div>
                   )
@@ -1115,10 +1108,10 @@ export default function AdminWeatherHazardPanel({
                     ? ` | Sisma M${Math.max(...rep.quakes.map((q) => q.magnitude)).toFixed(1)}`
                     : ''
                 return (
-                  <div className="text-neutral-300">
+                  <div className="text-neutral-200 text-xs sm:text-sm leading-relaxed">
                     <span className="text-neutral-400 font-semibold">{roleLabel}:</span>{' '}
-                    <span className="text-neutral-100">{rawPoint}</span>{' '}
-                    <span className="text-neutral-400">
+                    <span className="text-white font-medium">{rawPoint}</span>{' '}
+                    <span className="text-neutral-300">
                       ({rep.weather.temperature}°C, {getWeatherDescription(rep.weather.weatherCode)}
                       , pioggia 12h: {rep.weather.sumRain12h.toFixed(1)}mm, raffiche:{' '}
                       {rep.weather.windGustsNow}km/h{maxQ})
@@ -1131,23 +1124,23 @@ export default function AdminWeatherHazardPanel({
                 <div
                   key={mission.id}
                   className={
-                    'bg-neutral-950 border rounded p-3 space-y-1.5 ' +
+                    'bg-neutral-950 border rounded-xl p-4 space-y-2 ' +
                     (hasAlert ? 'border-red-600/90' : 'border-neutral-800')
                   }
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-neutral-100 uppercase">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-base font-bold text-white uppercase">
                       {mission.client_vip}
                     </span>
                     <span
                       className={
-                        'px-2 py-0.5 rounded text-[10px] font-bold uppercase border ' +
+                        'px-2.5 py-0.5 rounded-md text-xs font-bold uppercase border ' +
                         (hasAlert
                           ? 'bg-red-950 text-red-300 border-red-600'
                           : 'bg-emerald-950/60 text-emerald-300 border-emerald-800')
                       }
                     >
-                      {hasAlert ? `${alerts.length} ALLERTE TRATTA` : 'TRATTA REGOLARE'}
+                      {hasAlert ? `${alerts.length} Allerte Tratta` : 'Tratta Regolare'}
                     </span>
                   </div>
 
