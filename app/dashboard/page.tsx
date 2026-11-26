@@ -350,6 +350,19 @@ export default function DashboardPage() {
     year: 'numeric',
   })
 
+  const sopProps = {
+    isAdmin,
+    userEmail: user.email || '',
+    userId: user.id,
+    onAuditUpdated: handleControlRoomSync,
+  } as Parameters<typeof SopChecklists>[0]
+
+  const backupProps = {
+    isAdmin,
+    userEmail: user.email || '',
+    onAuditUpdated: handleControlRoomSync,
+  } as Parameters<typeof BackupManager>[0]
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-8 font-mono">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -711,7 +724,6 @@ export default function DashboardPage() {
         {/* 5. DELEGHE, TASK & NOTA SPESE (Solo Admin) */}
         {isAdmin && (
           <OperationsControl
-            isAdmin={isAdmin}
             userEmail={user.email || ''}
             userId={user.id}
             onAuditUpdated={handleControlRoomSync}
@@ -719,23 +731,10 @@ export default function DashboardPage() {
         )}
 
         {/* 6. PROCEDURE OPERATIVE / SOP (Nascosto all'Executive) */}
-        {!isExecutive && (
-          <SopChecklists
-            isAdmin={isAdmin}
-            userEmail={user.email || ''}
-            userId={user.id}
-            onAuditUpdated={handleControlRoomSync}
-          />
-        )}
+        {!isExecutive && <SopChecklists {...sopProps} />}
 
         {/* 7. BACKUP & RIPRISTINO (Solo Admin) */}
-        {isAdmin && (
-          <BackupManager
-            isAdmin={isAdmin}
-            userEmail={user.email || ''}
-            onAuditUpdated={handleControlRoomSync}
-          />
-        )}
+        {isAdmin && <BackupManager {...backupProps} />}
 
         {/* 8. LOG ATTIVITA' (Solo Admin) */}
         {isAdmin && (
