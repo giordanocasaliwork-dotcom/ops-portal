@@ -27,10 +27,7 @@ export default function DashboardPage() {
   const [dismissedSosId, setDismissedSosId] = useState<string | null>(null)
   const [archivingSos, setArchivingSos] = useState(false)
 
-  // Vista dedicata eventi odierni attivabile dal pulsante KPI "Agenda Oggi"
   const [showTodayFocus, setShowTodayFocus] = useState(false)
-
-  // KPI situazionali in tempo reale
   const [todayEventsCount, setTodayEventsCount] = useState<number>(0)
   const [urgentTasksCount, setUrgentTasksCount] = useState<number>(0)
   const [pendingExpensesSum, setPendingExpensesSum] = useState<number>(0)
@@ -48,9 +45,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedDismissed = window.localStorage.getItem('ops_dismissed_sos_id')
-      if (savedDismissed) {
-        setDismissedSosId(savedDismissed)
-      }
+      if (savedDismissed) setDismissedSosId(savedDismissed)
     }
   }, [])
 
@@ -64,23 +59,22 @@ export default function DashboardPage() {
   }
 
   const refreshKpiSummary = useCallback(
-    async (adminFlag: boolean, execFlag: boolean, currentMissions: Mission[]) => {
-      if (!adminFlag && !execFlag) return
+    async (adminFlag: boolean, currentMissions: Mission[]) => {
+      if (!adminFlag) return
 
       const todayKey = new Date().toDateString()
-      const todayMissionsList = execFlag
-        ? []
-        : currentMissions.filter(
-            (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
-          )
+      const todayMissionsList = currentMissions.filter(
+        (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
+      )
 
-      const [apptsRes, tasksRes, expRes] = await Promise.all([
+      const [apptsRes, tasksRes, expRes, inactiveRes] = await Promise.all([
         supabase
           .from('executive_appointments')
           .select('*')
           .order('start_time', { ascending: true }),
         supabase.from('action_items').select('priority, status, due_date'),
         supabase.from('expense_logs').select('amount, reimbursement_status'),
+        supabase.from('profiles').select('id').eq('is_active', false),
       ])
 
       const todayApptsList = ((apptsRes.data as ExecutiveAppointment[]) || []).filter(
@@ -103,13 +97,7 @@ export default function DashboardPage() {
         .reduce((acc: number, e: any) => acc + Number(e.amount || 0), 0)
       setPendingExpensesSum(pendingSum)
 
-      if (adminFlag) {
-        const { data: inactiveProfiles } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('is_active', false)
-        setPendingUsersCount((inactiveProfiles || []).length)
-      }
+      setPendingUsersCount((inactiveRes.data || []).length)
     },
     [supabase]
   )
@@ -121,9 +109,7 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(15)
 
-    if (logsData) {
-      setLogs(logsData)
-    }
+    if (logsData) setLogs(logsData)
   }, [supabase])
 
   useEffect(() => {
@@ -170,10 +156,8 @@ export default function DashboardPage() {
         setMissions(loadedMissions)
       }
 
-      await refreshKpiSummary(adminFlag, execFlag, loadedMissions)
-
       if (adminFlag) {
-        await refreshAuditLogs()
+        await Promise.all([refreshKpiSummary(true, loadedMissions), refreshAuditLogs()])
       }
 
       setLoading(false)
@@ -183,42 +167,35 @@ export default function DashboardPage() {
   }, [supabase, router, refreshAuditLogs, refreshKpiSummary])
 
   useEffect(() => {
-    const norm = role.toLowerCase()
-    if (norm !== 'admin' && norm !== 'executive') return
+    if (role.toLowerCase() !== 'admin') return
     const interval = setInterval(() => {
-      if (norm === 'admin') refreshAuditLogs()
-      refreshKpiSummary(norm === 'admin', norm === 'executive', missions)
+      refreshAuditLogs()
+      refreshKpiSummary(true, missions)
     }, 15000)
     return () => clearInterval(interval)
   }, [role, missions, refreshAuditLogs, refreshKpiSummary])
 
   useEffect(() => {
     if (!globalSosConfirm) return
-    const timer = setTimeout(() => {
-      setGlobalSosConfirm(false)
-    }, 5000)
+    const timer = setTimeout(() => setGlobalSosConfirm(false), 5000)
     return () => clearTimeout(timer)
   }, [globalSosConfirm])
 
   const handleControlRoomSync = useCallback(async () => {
-    const norm = role.toLowerCase()
-    const adminFlag = norm === 'admin'
-    const execFlag = norm === 'executive'
+    if (role.toLowerCase() !== 'admin') return
 
+    refreshAuditLogs()
     let latestMissions = missions
-    if (adminFlag) {
-      refreshAuditLogs()
-      const { data: missionsData } = await supabase
-        .from('missions')
-        .select('*')
-        .order('start_time', { ascending: true })
-      if (missionsData) {
-        latestMissions = missionsData as Mission[]
-        setMissions(latestMissions)
-      }
+    const { data: missionsData } = await supabase
+      .from('missions')
+      .select('*')
+      .order('start_time', { ascending: true })
+    if (missionsData) {
+      latestMissions = missionsData as Mission[]
+      setMissions(latestMissions)
     }
 
-    refreshKpiSummary(adminFlag, execFlag, latestMissions)
+    refreshKpiSummary(true, latestMissions)
   }, [role, missions, supabase, refreshAuditLogs, refreshKpiSummary])
 
   const handleArchiveSosBanner = async (sosLog: any) => {
@@ -290,16 +267,10 @@ export default function DashboardPage() {
         second: '2-digit',
       })
 
-      setGlobalSosSent({
-        time: nowTime,
-        coords: coordsText,
-        accuracy: accuracyVal,
-      })
+      setGlobalSosSent({ time: nowTime, coords: coordsText, accuracy: accuracyVal })
       setSendingGlobalSos(false)
 
-      if (adminFlag) {
-        await refreshAuditLogs()
-      }
+      if (adminFlag) await refreshAuditLogs()
     }
 
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
@@ -363,17 +334,14 @@ export default function DashboardPage() {
     : null
 
   const todayKey = new Date().toDateString()
-  const todayActiveMissions = isExecutive
-    ? []
-    : missions.filter(
+  const todayActiveMissions = isAdmin
+    ? missions.filter(
         (m) => new Date(m.start_time).toDateString() === todayKey && m.status !== 'chiusa'
       )
+    : []
 
   const formatTimeHour = (iso: string) =>
-    new Date(iso).toLocaleTimeString('it-IT', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
   const todayFormattedDate = new Date().toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -430,11 +398,11 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-yellow-500/30 pb-4">
             <div>
               <h1 className="text-xl font-bold tracking-widest uppercase text-neutral-100">
-                {isExecutive ? 'Ops Portal • Executive Control Room' : 'Ops Portal • Dashboard'}
+                {isExecutive ? 'Ops Portal • Area Riservata Direzione' : 'Ops Portal • Dashboard'}
               </h1>
               <p className="text-xs text-neutral-400 mt-1">
                 {isExecutive
-                  ? 'Area Riservata Direzione • Connessione Sicura'
+                  ? 'Agenda Appuntamenti & Rubrica Strategica • Connessione Sicura'
                   : 'Area Operativa Riservata • Connessione Sicura'}
               </p>
             </div>
@@ -507,7 +475,7 @@ export default function DashboardPage() {
                     rel="noopener noreferrer"
                     className="underline decoration-red-400 hover:text-white font-semibold"
                   >
-                    Apri su Maps &nearr;
+                    Vedi su Maps &nearr;
                   </a>
                 )}
               </div>
@@ -521,370 +489,314 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            <p>
-              <span className="text-neutral-500">UID:</span> {user.id}
-            </p>
-            <p>
-              <span className="text-neutral-500">Utente:</span>{' '}
-              {callsign ? `[${callsign}] ` : ''}
-              {user.email}
-            </p>
-            <p>
-              <span className="text-neutral-500">Profilo:</span>{' '}
-              <span
-                className={
-                  'uppercase font-bold ' +
-                  (isExecutive ? 'text-yellow-300' : 'text-emerald-400')
-                }
-              >
-                {isExecutive ? 'EXECUTIVE • DIREZIONE' : role}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {canAccessExecutivePanels && (
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${
-              isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-            } gap-3 text-xs`}
+            className={
+              'grid grid-cols-1 gap-4 pt-4 text-xs ' +
+              (isExecutive ? 'sm:grid-cols-2' : 'sm:grid-cols-3')
+            }
           >
-            <button
-              type="button"
-              onClick={() => setShowTodayFocus(!showTodayFocus)}
-              className={
-                'rounded-lg p-4 flex items-center justify-between text-left border-2 transition ' +
-                (showTodayFocus
-                  ? 'bg-emerald-950/40 border-emerald-400 shadow-lg shadow-emerald-950/30'
-                  : 'bg-neutral-900 border-yellow-500/70 hover:border-emerald-400 hover:bg-neutral-900/80')
-              }
-            >
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] uppercase text-yellow-300 font-bold">
-                    Agenda Oggi
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-400 text-neutral-950 text-[9px] font-bold uppercase">
-                    {showTodayFocus ? 'Chiudi' : 'Apri'}
-                  </span>
-                </div>
-                <div className="text-neutral-300 mt-1">
-                  {isExecutive ? 'Incontri del Giorno' : 'Eventi & Movimenti'}
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-emerald-300">{todayEventsCount}</div>
-            </button>
-
-            <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] uppercase text-yellow-300 font-bold">
-                  Priorita &amp; Scadenze
-                </div>
-                <div className="text-neutral-300 mt-0.5">Deleghe Alta / Scadute</div>
-              </div>
-              <div
-                className={`text-xl font-bold ${
-                  urgentTasksCount > 0 ? 'text-red-400' : 'text-emerald-400'
-                }`}
-              >
-                {urgentTasksCount}
-              </div>
+            <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
+              <span className="text-neutral-500 block mb-1">ACCOUNT CONNESSO</span>
+              <span className="text-neutral-200 font-semibold">{user.email}</span>
             </div>
-
-            <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] uppercase text-yellow-300 font-bold">Nota Spese</div>
-                <div className="text-neutral-300 mt-0.5">Da Rendicontare</div>
-              </div>
-              <div className="text-lg font-bold text-sky-300">
-                &euro; {pendingExpensesSum.toFixed(2)}
-              </div>
+            <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
+              <span className="text-neutral-500 block mb-1">LIVELLO ACCESSO</span>
+              <span className="text-emerald-400 font-semibold uppercase">
+                {role}
+                {callsign ? ` • ${callsign}` : ''}
+              </span>
             </div>
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => router.push('/team')}
-                className={
-                  'bg-neutral-900 border-2 rounded-lg p-4 flex items-center justify-between text-left transition ' +
-                  (pendingUsersCount > 0
-                    ? 'border-yellow-400 hover:bg-yellow-950/20'
-                    : 'border-yellow-500/70 hover:border-yellow-400')
-                }
-              >
-                <div>
-                  <div className="text-[10px] uppercase text-yellow-300 font-bold">
-                    Clearance Team
-                  </div>
-                  <div className="text-neutral-300 mt-0.5">Richieste in Sospeso</div>
-                </div>
-                <div
-                  className={`text-xl font-bold ${
-                    pendingUsersCount > 0 ? 'text-yellow-300 animate-pulse' : 'text-neutral-400'
-                  }`}
-                >
-                  {pendingUsersCount}
-                </div>
-              </button>
+            {!isExecutive && (
+              <div className="bg-neutral-950 p-3 rounded border border-neutral-800">
+                <span className="text-neutral-500 block mb-1">STATO PORTALE</span>
+                <span className="text-emerald-400 font-semibold">OPERATIVO</span>
+              </div>
             )}
           </div>
-        )}
 
-        {canAccessExecutivePanels && showTodayFocus && (
-          <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-yellow-500/30 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-yellow-400 text-neutral-950 text-[10px] font-bold uppercase">
-                    VISTA RAPIDA OGGI
-                  </span>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-yellow-300">
-                    Programma Odierno — {todayFormattedDate}
-                  </h2>
-                </div>
-                <p className="text-xs text-neutral-400 mt-1">
-                  Riepilogo dedicato esclusivamente agli impegni attivi della giornata odierna
-                </p>
-              </div>
-
+          {isAdmin && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-xs">
               <button
                 type="button"
-                onClick={() => setShowTodayFocus(false)}
-                className="self-start sm:self-center bg-neutral-950 hover:bg-neutral-800 text-yellow-300 border border-yellow-400 text-xs uppercase px-3 py-1.5 rounded transition font-semibold"
+                onClick={() => setShowTodayFocus(!showTodayFocus)}
+                className={
+                  'text-left p-3 rounded border transition ' +
+                  (showTodayFocus
+                    ? 'bg-sky-950/60 border-sky-500'
+                    : 'bg-neutral-950 border-sky-900/70 hover:border-sky-600')
+                }
               >
-                Chiudi Vista Oggi
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-neutral-500 uppercase">AGENDA OGGI (APPUNT. + MOV.)</span>
+                  <span className="text-[10px] uppercase text-sky-400 font-bold">
+                    {showTodayFocus ? 'Chiudi ▲' : 'Dettagli ▼'}
+                  </span>
+                </div>
+                <span className="text-sky-300 font-bold text-sm">
+                  {todayEventsCount} {todayEventsCount === 1 ? 'evento attivo' : 'eventi attivi'}
+                </span>
               </button>
-            </div>
 
-            {todayAppointments.length === 0 && todayActiveMissions.length === 0 ? (
-              <div className="py-6 text-center text-xs text-neutral-400 border border-dashed border-neutral-800 rounded-lg">
-                Nessun appuntamento o evento attivo pianificato per oggi.
+              <div className="bg-neutral-950 p-3 rounded border border-amber-900/70">
+                <span className="text-neutral-500 block mb-1 uppercase">
+                  PRIORIT&Agrave; &amp; SCADENZE URGENTI
+                </span>
+                <span
+                  className={
+                    'font-bold text-sm ' +
+                    (urgentTasksCount > 0 ? 'text-amber-300' : 'text-emerald-400')
+                  }
+                >
+                  {urgentTasksCount}{' '}
+                  {urgentTasksCount === 1 ? 'task urgente' : 'task urgenti'}
+                </span>
               </div>
-            ) : (
-              <div className="space-y-4 text-xs">
-                {todayAppointments.map((appt) => {
-                  const isPhysical =
-                    appt.location_details &&
-                    appt.location_type !== 'Video / Call Riservata' &&
-                    !appt.location_details.toLowerCase().startsWith('http')
 
-                  return (
-                    <div
-                      key={appt.id}
-                      className="bg-neutral-950 border-2 border-emerald-500/80 border-l-4 border-l-emerald-400 rounded-lg p-4 space-y-2 shadow-md"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded bg-emerald-400 text-neutral-950 font-bold text-[11px]">
-                          {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500 text-[10px] font-bold uppercase">
-                          {appt.status}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-200 uppercase">
-                          {appt.location_type}
-                        </span>
-                        <span className="text-sm font-bold text-neutral-100">{appt.title}</span>
-                      </div>
+              <div className="bg-neutral-950 p-3 rounded border border-emerald-900/70">
+                <span className="text-neutral-500 block mb-1 uppercase">
+                  NOTA SPESE DA RENDICONTARE
+                </span>
+                <span className="text-emerald-300 font-bold text-sm">
+                  &euro; {pendingExpensesSum.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
 
-                      {appt.location_details && (
-                        <div className="flex flex-wrap items-center gap-2 text-neutral-300">
-                          <span className="text-neutral-500">Sede / Luogo:</span>
-                          <span>{appt.location_details}</span>
-                          {isPhysical && (
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                appt.location_details
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-500/60 transition"
-                            >
-                              Maps &nearr;
-                            </a>
+          {isAdmin && showTodayFocus && (
+            <div className="mt-4 bg-neutral-950 border border-sky-700/80 rounded-lg p-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-900/60 pb-2.5">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                    Agenda Odierna — {todayFormattedDate}
+                  </div>
+                  <p className="text-[11px] text-neutral-400">
+                    Riepilogo rapido degli appuntamenti e movimentazioni programmate per oggi
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTodayFocus(false)}
+                  className="text-[11px] uppercase px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700"
+                >
+                  Chiudi Vista Rapida
+                </button>
+              </div>
+
+              {todayEventsCount === 0 ? (
+                <div className="text-xs text-neutral-400 py-2">
+                  Nessun appuntamento o movimentazione attiva programmata per la giornata odierna.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-2">
+                    <div className="text-[11px] uppercase font-bold text-amber-300">
+                      Appuntamenti &amp; Meeting Oggi ({todayAppointments.length})
+                    </div>
+                    {todayAppointments.length > 0 ? (
+                      todayAppointments.map((appt) => (
+                        <div
+                          key={appt.id}
+                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-amber-200">
+                              {formatTimeHour(appt.start_time)} &rarr; {formatTimeHour(appt.end_time)}
+                            </span>
+                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-800">
+                              {appt.status}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-neutral-100">{appt.title}</div>
+                          {appt.location && (
+                            <div className="text-neutral-400 text-[11px]">Luogo: {appt.location}</div>
+                          )}
+                          {appt.participants && (
+                            <div className="text-neutral-400 text-[11px]">
+                              Partecipanti: {appt.participants}
+                            </div>
                           )}
                         </div>
-                      )}
-
-                      {appt.participants && (
-                        <div className="text-neutral-300">
-                          <span className="text-neutral-500">Partecipanti:</span>{' '}
-                          {appt.participants}
-                        </div>
-                      )}
-
-                      {appt.meeting_agenda && (
-                        <div className="bg-neutral-900/80 border border-emerald-500/30 rounded p-2.5 text-neutral-200 whitespace-pre-line">
-                          <span className="text-[10px] uppercase text-emerald-300 font-bold block mb-0.5">
-                            Dettagli / Ordine del Giorno
-                          </span>
-                          {appt.meeting_agenda}
-                        </div>
-                      )}
-
-                      {appt.prep_notes && (
-                        <div className="text-neutral-400 italic">
-                          Note preparatorie: {appt.prep_notes}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {todayActiveMissions.map((m) => (
-                  <div
-                    key={m.id}
-                    className="bg-neutral-950 border-2 border-sky-500/80 border-l-4 border-l-sky-400 rounded-lg p-4 space-y-2 shadow-md"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded bg-sky-400 text-neutral-950 font-bold text-[11px]">
-                        {formatTimeHour(m.start_time)} &rarr; {formatTimeHour(m.end_time)}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-sky-950/70 text-sky-300 border border-sky-700 text-[10px] font-bold uppercase">
-                        MOVIMENTO • {m.status}
-                      </span>
-                      <span className="text-sm font-bold text-neutral-100 uppercase">
-                        {m.client_vip}
-                      </span>
-                      <span className="text-neutral-400">| Mezzo: {m.assigned_vehicle}</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-neutral-300">
-                      <span className="text-neutral-500">Tratta:</span>
-                      <span>
-                        {m.pickup_point} &rarr; {m.dropoff_point}
-                      </span>
-                      <a
-                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
-                          m.pickup_point
-                        )}&destination=${encodeURIComponent(m.dropoff_point)}&travelmode=driving`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-sky-700/70 transition"
-                      >
-                        Rotta Maps &nearr;
-                      </a>
-                    </div>
-
-                    {m.notes && <div className="text-neutral-400 italic">Note: {m.notes}</div>}
+                      ))
+                    ) : (
+                      <div className="text-neutral-500 text-[11px]">
+                        Nessun meeting in agenda per oggi.
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
+                  <div className="space-y-2">
+                    <div className="text-[11px] uppercase font-bold text-emerald-300">
+                      Movimentazioni &amp; Trasferte Oggi ({todayActiveMissions.length})
+                    </div>
+                    {todayActiveMissions.length > 0 ? (
+                      todayActiveMissions.map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-2.5 rounded bg-neutral-900 border border-neutral-800 space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-emerald-200">
+                              {formatTimeHour(m.start_time)} &rarr; {formatTimeHour(m.end_time)}
+                            </span>
+                            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800">
+                              {m.status}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-neutral-100 uppercase">
+                            {m.client_vip}
+                          </div>
+                          <div className="text-neutral-300 text-[11px]">
+                            {m.pickup_point} &rarr; {m.dropoff_point}
+                          </div>
+                          <div className="text-neutral-400 text-[11px]">
+                            Mezzo: {m.assigned_vehicle}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-neutral-500 text-[11px]">
+                        Nessuna movimentazione programmata per oggi.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 1. AGENDA APPUNTAMENTI & MEETING (Visibile a Admin ed Executive) */}
         {canAccessExecutivePanels && (
           <ExecutiveAppointments
+            isAdmin={isAdmin}
             userEmail={user.email || ''}
             userId={user.id}
             onAuditUpdated={handleControlRoomSync}
           />
         )}
 
+        {/* 2. METEO LOCALE, TRATTE & EARLY WARNING CALAMITA (Solo Admin) */}
         {isAdmin && (
           <AdminWeatherHazardPanel
             isAdmin={isAdmin}
-            missions={missions}
             userEmail={user.email || ''}
             userId={user.id}
-            onAuditUpdated={refreshAuditLogs}
+            missions={missions}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
+        {/* 3. AGENDA DIREZIONALE, FLOTTA & RISK ASSESSMENT (Nascosto all'Executive) */}
         {!isExecutive && (
           <MissionBoard
             initialMissions={missions}
             isAdmin={isAdmin}
             userEmail={user.email || ''}
             userId={user.id}
-            onAuditUpdated={isAdmin ? handleControlRoomSync : undefined}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
+        {/* 4. GATEKEEPING, RUBRICA STRATEGICA & PREFERENZE VIP (Visibile a Admin ed Executive) */}
         {canAccessExecutivePanels && (
           <ExecutiveHub
+            isAdmin={isAdmin}
             userEmail={user.email || ''}
+            userId={user.id}
             onAuditUpdated={handleControlRoomSync}
           />
         )}
 
-        {canAccessExecutivePanels && (
-          <OperationsControl
-            userEmail={user.email || ''}
-            onAuditUpdated={handleControlRoomSync}
-          />
-        )}
-
+        {/* 5. DELEGHE, TASK & NOTA SPESE (Solo Admin) */}
         {isAdmin && (
-          <SopChecklists
+          <OperationsControl
+            isAdmin={isAdmin}
             userEmail={user.email || ''}
+            userId={user.id}
             onAuditUpdated={handleControlRoomSync}
           />
         )}
 
+        {/* 6. PROCEDURE OPERATIVE / SOP (Nascosto all'Executive) */}
+        {!isExecutive && (
+          <SopChecklists
+            isAdmin={isAdmin}
+            userEmail={user.email || ''}
+            userId={user.id}
+            onAuditUpdated={handleControlRoomSync}
+          />
+        )}
+
+        {/* 7. BACKUP & RIPRISTINO (Solo Admin) */}
         {isAdmin && (
           <BackupManager
+            isAdmin={isAdmin}
             userEmail={user.email || ''}
-            onAuditUpdated={refreshAuditLogs}
+            onAuditUpdated={handleControlRoomSync}
           />
         )}
 
+        {/* 8. LOG ATTIVITA' (Solo Admin) */}
         {isAdmin && (
           <div className="bg-neutral-900 border-2 border-yellow-500/70 rounded-lg p-6 shadow-xl">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-200">
-                Audit Log • Ultimi Accessi e Azioni
+            <div className="flex items-center justify-between border-b border-yellow-500/30 pb-3 mb-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-100">
+                Log Attivit&agrave; di Sistema, Check-in &amp; Allerte (Solo Admin)
               </h2>
-              <button
-                type="button"
-                onClick={refreshAuditLogs}
-                className="text-[11px] uppercase px-2.5 py-1 rounded bg-neutral-950 hover:bg-neutral-800 text-neutral-300 border border-neutral-700 transition"
-              >
-                Aggiorna Log
-              </button>
+              <span className="text-[11px] text-neutral-500">Aggiornamento automatico</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-neutral-800 text-neutral-500 uppercase">
-                  <tr>
-                    <th className="py-2 pr-4">Data / Ora</th>
-                    <th className="py-2 pr-4">Operatore</th>
-                    <th className="py-2 pr-4">Azione</th>
-                    <th className="py-2">Stato</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-800/60">
-                  {logs && logs.length > 0 ? (
-                    logs.map((log: any, idx: number) => {
-                      const actionStr = String(log.action || '')
-                      const coords = extractGpsCoords(actionStr)
-                      const isSosRow = log.status === 'SOS'
+            {logs.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-neutral-500 border-b border-neutral-800 uppercase">
+                    <tr>
+                      <th className="py-2 pr-4">Data / Ora</th>
+                      <th className="py-2 pr-4">Operatore</th>
+                      <th className="py-2 pr-4">Evento / Coordinate</th>
+                      <th className="py-2">Stato</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-800/60">
+                    {logs.map((item: any, idx: number) => {
+                      const isSos = item.status === 'SOS'
+                      const isSosAck = item.status === 'SOS-ACK'
+                      const isCheckIn = item.status === 'CHECK-IN'
+                      const gpsCoords = extractGpsCoords(String(item.action || ''))
 
                       return (
-                        <tr key={log.id || idx} className={isSosRow ? 'bg-red-950/35' : ''}>
-                          <td className="py-2 pr-4 text-neutral-400">
-                            {log.created_at
-                              ? new Date(log.created_at).toLocaleString('it-IT')
+                        <tr
+                          key={item.id || idx}
+                          className={
+                            isSos
+                              ? 'bg-red-950/35 text-red-200'
+                              : isSosAck
+                              ? 'bg-neutral-900/60 text-neutral-400'
+                              : isCheckIn
+                              ? 'bg-sky-950/20 text-sky-200'
+                              : 'text-neutral-300'
+                          }
+                        >
+                          <td className="py-2 pr-4 whitespace-nowrap">
+                            {item.created_at
+                              ? new Date(item.created_at).toLocaleString('it-IT')
                               : '-'}
                           </td>
-                          <td className="py-2 pr-4 text-neutral-200">{log.user_email}</td>
-                          <td className="py-2 pr-4 text-neutral-300">
-                            <span className={isSosRow ? 'text-red-200 font-semibold' : ''}>
-                              {actionStr}
-                            </span>
-                            {coords && (
+                          <td className="py-2 pr-4">{item.user_email}</td>
+                          <td className="py-2 pr-4">
+                            <span>{item.action}</span>
+                            {gpsCoords && (
                               <a
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                  coords
+                                  gpsCoords
                                 )}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={
-                                  'ml-2 inline-block text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border transition ' +
-                                  (isSosRow
-                                    ? 'bg-red-900/80 hover:bg-red-800 text-white border-red-500'
-                                    : 'bg-sky-950/70 hover:bg-sky-900 text-sky-300 border-sky-700')
+                                  'ml-2 underline text-[11px] font-semibold ' +
+                                  (isSos
+                                    ? 'text-red-300 hover:text-white'
+                                    : 'text-sky-400 hover:text-sky-200')
                                 }
                               >
                                 Maps &nearr;
@@ -892,35 +804,28 @@ export default function DashboardPage() {
                             )}
                           </td>
                           <td
-                            className={`py-2 font-semibold ${
-                              isSosRow
-                                ? 'text-red-400 font-bold'
-                                : log.status === 'SOS-ACK'
-                                ? 'text-amber-300'
-                                : log.status === 'DENIED'
+                            className={
+                              'py-2 font-bold ' +
+                              (isSos
                                 ? 'text-red-400'
-                                : log.status === 'PENDING'
-                                ? 'text-amber-400'
-                                : log.status === 'CHECK-IN'
+                                : isSosAck
+                                ? 'text-neutral-400'
+                                : isCheckIn
                                 ? 'text-sky-400'
-                                : 'text-emerald-400'
-                            }`}
+                                : 'text-emerald-400')
+                            }
                           >
-                            {log.status}
+                            {item.status}
                           </td>
                         </tr>
                       )
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-neutral-500">
-                        Nessun evento registrato.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-500">Nessun evento registrato nel log.</p>
+            )}
           </div>
         )}
       </div>
