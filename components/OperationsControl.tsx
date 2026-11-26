@@ -410,11 +410,11 @@ export default function OperationsControl({
   }
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-amber-500 rounded-xl p-4 sm:p-6 shadow-xl space-y-5">
+    <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-indigo-400 rounded-xl p-4 sm:p-6 shadow-xl space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase">
+            <span className="px-2.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 text-xs font-bold uppercase">
               Chief of Staff
             </span>
             <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
@@ -433,7 +433,7 @@ export default function OperationsControl({
             className={
               'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
               (activeTab === 'actions'
-                ? 'bg-amber-400 text-neutral-950 border-amber-400'
+                ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
                 : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
@@ -446,7 +446,7 @@ export default function OperationsControl({
             className={
               'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
               (activeTab === 'vendors'
-                ? 'bg-amber-400 text-neutral-950 border-amber-400'
+                ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
                 : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
@@ -459,7 +459,7 @@ export default function OperationsControl({
             className={
               'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
               (activeTab === 'expenses'
-                ? 'bg-amber-400 text-neutral-950 border-amber-400'
+                ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
                 : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
@@ -506,7 +506,7 @@ export default function OperationsControl({
               <button
                 type="button"
                 onClick={() => setShowActionForm(!showActionForm)}
-                className="min-h-[38px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
+                className="min-h-[38px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
               >
                 {showActionForm ? 'Chiudi Modulo' : '+ Nuova Delega'}
               </button>
@@ -518,7 +518,7 @@ export default function OperationsControl({
               onSubmit={handleAddAction}
               className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
             >
-              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
+              <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 Nuovo Incarico / Follow-up Direzione
               </div>
 
@@ -598,7 +598,7 @@ export default function OperationsControl({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
+                  className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
                   {loading ? 'Salvataggio...' : 'Registra Delega'}
                 </button>
@@ -631,7 +631,7 @@ export default function OperationsControl({
                         >
                           {item.priority}
                         </span>
-                        <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-800 text-xs text-emerald-300 font-semibold">
+                        <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-800 text-xs text-indigo-300 font-semibold">
                           Ref: {item.owner_name}
                         </span>
                         {item.due_date && (
@@ -716,7 +716,7 @@ export default function OperationsControl({
                 value={vendorSearch}
                 onChange={(e) => setVendorSearch(e.target.value)}
                 placeholder="Cerca fornitore, citta, contatto..."
-                className="bg-neutral-950 border border-neutral-700 rounded-lg px-3.5 py-2 text-base sm:text-sm text-white w-full sm:w-64 focus:outline-none focus:border-amber-400"
+                className="bg-neutral-950 border border-neutral-700 rounded-lg px-3.5 py-2 text-base sm:text-sm text-white w-full sm:w-64 focus:outline-none focus:border-indigo-400"
               />
 
               <select
@@ -737,7 +737,7 @@ export default function OperationsControl({
             <button
               type="button"
               onClick={() => setShowVendorForm(!showVendorForm)}
-              className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto"
+              className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto"
             >
               {showVendorForm ? 'Chiudi Modulo' : '+ Nuovo Fornitore'}
             </button>
@@ -748,7 +748,7 @@ export default function OperationsControl({
               onSubmit={handleAddVendor}
               className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
             >
-              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
+              <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 Registrazione Fornitore Selezionato
               </div>
 
@@ -829,7 +829,7 @@ export default function OperationsControl({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
+                  className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
                   {loading ? 'Salvataggio...' : 'Salva Fornitore'}
                 </button>
@@ -846,7 +846,7 @@ export default function OperationsControl({
                 >
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase">
+                      <span className="px-2.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 text-xs font-bold uppercase">
                         {v.category}
                       </span>
                       {v.city_area && (
@@ -935,179 +935,4 @@ export default function OperationsControl({
               <button
                 type="button"
                 onClick={() => setShowExpenseForm(!showExpenseForm)}
-                className="min-h-[38px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
-              >
-                {showExpenseForm ? 'Chiudi Modulo' : '+ Registra Spesa'}
-              </button>
-            </div>
-          </div>
-
-          {showExpenseForm && (
-            <form
-              onSubmit={handleAddExpense}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
-            >
-              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                Nuova Voce di Spesa Operativa / Rappresentanza
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5">
-                <div>
-                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Data *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={expenseDate}
-                    onChange={(e) => setExpenseDate(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Categoria
-                  </label>
-                  <select
-                    value={expenseCategory}
-                    onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
-                  >
-                    <option value="Trasporti / NCC">Trasporti / NCC</option>
-                    <option value="Voli / Treni">Voli / Treni</option>
-                    <option value="Hotel / Ospitalita">Hotel / Ospitalita</option>
-                    <option value="Rappresentanza / Ristoranti">Rappresentanza / Ristoranti</option>
-                    <option value="Sicurezza / Scorta">Sicurezza / Scorta</option>
-                    <option value="Varie / Emergenze">Varie / Emergenze</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Descrizione Spesa *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={expenseDesc}
-                    onChange={(e) => setExpenseDesc(e.target.value)}
-                    placeholder="Es. Transfer FCO-EUR / Pranzo lavoro"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Importo (EUR) *
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    required
-                    value={expenseAmount}
-                    onChange={(e) => setExpenseAmount(e.target.value)}
-                    placeholder="Es. 145.50"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3.5">
-                <div className="flex-1">
-                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Riferimento Missione / Centro di Costo (Opzionale)
-                  </label>
-                  <input
-                    type="text"
-                    value={expenseMissionRef}
-                    onChange={(e) => setExpenseMissionRef(e.target.value)}
-                    placeholder="Es. Missione VIP Roma / Trasferta Kenya"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50 shrink-0"
-                >
-                  {loading ? 'Salvataggio...' : 'Registra Spesa'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {filteredExpenses.length > 0 ? (
-            <div className="space-y-3 text-sm">
-              {filteredExpenses.map((exp) => (
-                <div
-                  key={exp.id}
-                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ${expenseBadge(
-                          exp.reimbursement_status
-                        )}`}
-                      >
-                        {exp.reimbursement_status}
-                      </span>
-                      <span className="text-neutral-300 font-mono text-xs sm:text-sm">
-                        {new Date(exp.expense_date).toLocaleDateString('it-IT')}
-                      </span>
-                      <span className="text-neutral-600">•</span>
-                      <span className="text-neutral-200 font-semibold">{exp.category}</span>
-                      <span className="text-neutral-600">•</span>
-                      <span className="text-base font-bold font-mono text-white">
-                        &euro; {Number(exp.amount).toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className="text-neutral-100 text-base">{exp.description}</div>
-                    {exp.mission_ref && (
-                      <div className="text-xs sm:text-sm text-neutral-400">
-                        Riferimento: {exp.mission_ref}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
-                    <select
-                      aria-label="Stato rimborso"
-                      value={exp.reimbursement_status}
-                      onChange={(e) =>
-                        handleExpenseStatusChange(
-                          exp,
-                          e.target.value as 'DA RENDICONTARE' | 'INVIATO' | 'RIMBORSATO'
-                        )
-                      }
-                      className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
-                    >
-                      <option value="DA RENDICONTARE">Da Rendicontare</option>
-                      <option value="INVIATO">Inviato</option>
-                      <option value="RIMBORSATO">Rimborsato</option>
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteExpense(exp)}
-                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                    >
-                      Elimina
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
-              Nessuna voce di spesa registrata per questo filtro.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
+                className="min-h-[38px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font
