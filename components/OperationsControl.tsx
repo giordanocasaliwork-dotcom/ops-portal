@@ -45,6 +45,7 @@ export default function OperationsControl({
   onAuditUpdated,
 }: OperationsControlProps) {
   const supabase = useMemo(() => createClient(), [])
+
   const actionFormRef = useRef<HTMLFormElement | null>(null)
   const vendorFormRef = useRef<HTMLFormElement | null>(null)
   const expenseFormRef = useRef<HTMLFormElement | null>(null)
@@ -91,6 +92,7 @@ export default function OperationsControl({
 
   const toLocalInputFormat = (isoString: string) => {
     const d = new Date(isoString)
+    if (Number.isNaN(d.getTime())) return ''
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
       d.getHours()
@@ -132,7 +134,8 @@ export default function OperationsControl({
     setShowActionForm(false)
   }
 
-  const handleEditActionClick = (item: ActionItem) => {
+  const handleEditAction = (item: ActionItem) => {
+    setError(null)
     setEditingActionId(item.id)
     setActionTitle(item.title)
     setActionOwner(item.owner_name)
@@ -140,7 +143,6 @@ export default function OperationsControl({
     setActionPriority(item.priority)
     setActionNotes(item.notes || '')
     setShowActionForm(true)
-    setError(null)
     setTimeout(() => {
       actionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
@@ -236,7 +238,9 @@ export default function OperationsControl({
       setError('Errore eliminazione delega.')
       return
     }
-    if (editingActionId === item.id) resetActionForm()
+    if (editingActionId === item.id) {
+      resetActionForm()
+    }
     await loadAllOperations()
   }
 
@@ -279,15 +283,15 @@ export default function OperationsControl({
     setShowVendorForm(false)
   }
 
-  const handleEditVendorClick = (v: VendorItem) => {
-    setEditingVendorId(v.id)
-    setVendorName(v.name)
-    setVendorCategory(v.category)
-    setVendorCity(v.city_area || '')
-    setVendorContact(v.contact_info || '')
-    setVendorNotes(v.reliability_notes || '')
-    setShowVendorForm(true)
+  const handleEditVendor = (vendor: VendorItem) => {
     setError(null)
+    setEditingVendorId(vendor.id)
+    setVendorName(vendor.name)
+    setVendorCategory(vendor.category || 'NCC / Transfer')
+    setVendorCity(vendor.city_area || '')
+    setVendorContact(vendor.contact_info || '')
+    setVendorNotes(vendor.reliability_notes || '')
+    setShowVendorForm(true)
     setTimeout(() => {
       vendorFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
@@ -352,7 +356,9 @@ export default function OperationsControl({
       setError('Errore rimozione fornitore.')
       return
     }
-    if (editingVendorId === vendor.id) resetVendorForm()
+    if (editingVendorId === vendor.id) {
+      resetVendorForm()
+    }
     await loadAllOperations()
   }
 
@@ -366,15 +372,15 @@ export default function OperationsControl({
     setShowExpenseForm(false)
   }
 
-  const handleEditExpenseClick = (exp: ExpenseLogItem) => {
+  const handleEditExpense = (exp: ExpenseLogItem) => {
+    setError(null)
     setEditingExpenseId(exp.id)
     setExpenseDate(exp.expense_date ? exp.expense_date.slice(0, 10) : new Date().toISOString().slice(0, 10))
-    setExpenseCategory(exp.category)
     setExpenseDesc(exp.description)
+    setExpenseCategory(exp.category || 'Trasporti / NCC')
     setExpenseAmount(String(exp.amount))
     setExpenseMissionRef(exp.mission_ref || '')
     setShowExpenseForm(true)
-    setError(null)
     setTimeout(() => {
       expenseFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }, 50)
@@ -475,7 +481,9 @@ export default function OperationsControl({
       setError('Errore eliminazione voce spesa.')
       return
     }
-    if (editingExpenseId === exp.id) resetExpenseForm()
+    if (editingExpenseId === exp.id) {
+      resetExpenseForm()
+    }
     await loadAllOperations()
   }
 
@@ -644,6 +652,7 @@ export default function OperationsControl({
                   if (showActionForm) {
                     resetActionForm()
                   } else {
+                    setEditingActionId(null)
                     setShowActionForm(true)
                   }
                 }}
@@ -658,11 +667,11 @@ export default function OperationsControl({
             <form
               ref={actionFormRef}
               onSubmit={handleSaveAction}
-              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/50 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 {editingActionId
-                  ? 'Modifica Incarico / Delega Direzione'
+                  ? 'Modifica Incarico / Follow-up Direzione'
                   : 'Nuovo Incarico / Follow-up Direzione'}
               </div>
 
@@ -828,7 +837,7 @@ export default function OperationsControl({
                     <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleEditActionClick(item)}
+                        onClick={() => handleEditAction(item)}
                         className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
                       >
                         Modifica
@@ -853,7 +862,7 @@ export default function OperationsControl({
                       <button
                         type="button"
                         onClick={() => handleDeleteAction(item)}
-                        className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                        className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
                       >
                         Elimina
                       </button>
@@ -903,6 +912,7 @@ export default function OperationsControl({
                 if (showVendorForm) {
                   resetVendorForm()
                 } else {
+                  setEditingVendorId(null)
                   setShowVendorForm(true)
                 }
               }}
@@ -916,7 +926,7 @@ export default function OperationsControl({
             <form
               ref={vendorFormRef}
               onSubmit={handleSaveVendor}
-              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/50 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 {editingVendorId
@@ -1025,7 +1035,7 @@ export default function OperationsControl({
               {filteredVendors.map((v) => (
                 <div
                   key={v.id}
-                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex items-start justify-between gap-3"
+                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between gap-3"
                 >
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1047,18 +1057,18 @@ export default function OperationsControl({
                     )}
                   </div>
 
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <div className="flex items-center justify-end gap-2 border-t border-neutral-800/80 pt-2.5">
                     <button
                       type="button"
-                      onClick={() => handleEditVendorClick(v)}
-                      className="text-indigo-300 hover:text-indigo-200 text-xs font-bold uppercase py-1"
+                      onClick={() => handleEditVendor(v)}
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase"
                     >
                       Modifica
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteVendor(v)}
-                      className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase py-1"
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-red-950/70 border border-neutral-800 hover:border-red-800 text-neutral-400 hover:text-red-300 text-xs font-semibold uppercase"
                     >
                       Rimuovi
                     </button>
@@ -1130,6 +1140,7 @@ export default function OperationsControl({
                   if (showExpenseForm) {
                     resetExpenseForm()
                   } else {
+                    setEditingExpenseId(null)
                     setShowExpenseForm(true)
                   }
                 }}
@@ -1144,7 +1155,7 @@ export default function OperationsControl({
             <form
               ref={expenseFormRef}
               onSubmit={handleSaveExpense}
-              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/50 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 {editingExpenseId
@@ -1290,7 +1301,7 @@ export default function OperationsControl({
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleEditExpenseClick(exp)}
+                      onClick={() => handleEditExpense(exp)}
                       className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
                     >
                       Modifica
@@ -1315,7 +1326,7 @@ export default function OperationsControl({
                     <button
                       type="button"
                       onClick={() => handleDeleteExpense(exp)}
-                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
                     >
                       Elimina
                     </button>
