@@ -1,6 +1,6 @@
  'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
 
 export interface ChecklistStep {
@@ -26,10 +26,12 @@ interface SopChecklistsProps {
 
 export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklistsProps) {
   const supabase = useMemo(() => createClient(), [])
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   const [checklists, setChecklists] = useState<SopChecklist[]>([])
   const [categoryFilter, setCategoryFilter] = useState<string>('TUTTE')
   const [showForm, setShowForm] = useState(false)
+  const [editingSopId, setEditingSopId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,54 +64,108 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
     loadChecklists()
   }, [loadChecklists])
 
-  const handleCreateSop = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setEditingSopId(null)
+    setTitle('')
+    setCategory('Viaggi & Trasferte')
+    setRawSteps('')
+    setNotes('')
+    setShowForm(false)
+  }
+
+  const handleEditSopClick = (sop: SopChecklist) => {
+    setEditingSopId(sop.id)
+    setTitle(sop.title)
+    setCategory(sop.category)
+    setRawSteps(sop.items.map((item) => item.text).join('\n'))
+    setNotes(sop.notes || '')
+    setShowForm(true)
+    setError(null)
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveSop = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const parsedSteps: ChecklistStep[] = rawSteps
+      const lines = rawSteps
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
-        .map((line, idx) => ({
+
+      if (lines.length === 0) {
+        throw new Error('Inserisci almeno un punto operativo per la checklist.')
+      }
+
+      if (editingSopId) {
+        const existingSop = checklists.find((c) => c.id === editingSopId)
+        const existingItems = existingSop?.items || []
+
+        const updatedSteps: ChecklistStep[] = lines.map((line, idx) => {
+          const matched = existingItems.find(
+            (old) => old.text.trim().toLowerCase() === line.toLowerCase()
+          )
+          return matched
+            ? { ...matched, text: line }
+            : { id: `${Date.now()}-${idx}`, text: line, done: false }
+        })
+
+        const { error: updErr } = await supabase
+          .from('sop_checklists')
+          .update({
+            title: title.trim(),
+            category,
+            items: updatedSteps,
+            notes: notes.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingSopId)
+
+        if (updErr) throw updErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `SOP_UPDATE: ${title.trim()} (${category})`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const parsedSteps: ChecklistStep[] = lines.map((line, idx) => ({
           id: `${Date.now()}-${idx}`,
           text: line,
           done: false,
         }))
 
-      if (parsedSteps.length === 0) {
-        throw new Error('Inserisci almeno un punto operativo per la checklist.')
+        const { error: insErr } = await supabase.from('sop_checklists').insert([
+          {
+            title: title.trim(),
+            category,
+            items: parsedSteps,
+            notes: notes.trim() || null,
+          },
+        ])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `SOP_CREATE: ${title.trim()} (${category})`,
+            status: 'SUCCESS',
+          },
+        ])
       }
 
-      const { error: insErr } = await supabase.from('sop_checklists').insert([
-        {
-          title: title.trim(),
-          category,
-          items: parsedSteps,
-          notes: notes.trim() || null,
-        },
-      ])
-
-      if (insErr) throw insErr
-
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `SOP_CREATE: ${title.trim()} (${category})`,
-          status: 'SUCCESS',
-        },
-      ])
-
-      setTitle('')
-      setCategory('Viaggi & Trasferte')
-      setRawSteps('')
-      setNotes('')
-      setShowForm(false)
+      resetForm()
       await loadChecklists()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
-      setError(err.message || 'Errore creazione procedura SOP.')
+      setError(err.message || 'Errore salvataggio procedura SOP.')
     } finally {
       setLoading(false)
     }
@@ -168,6 +224,10 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
     if (delErr) {
       setError('Errore eliminazione SOP.')
       return
+    }
+
+    if (editingSopId === sop.id) {
+      resetForm()
     }
 
     await supabase.from('audit_logs').insert([
@@ -230,7 +290,13 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
 
           <button
             type="button"
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              if (showForm) {
+                resetForm()
+              } else {
+                setShowForm(true)
+              }
+            }}
             className="min-h-[38px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
           >
             {showForm ? 'Chiudi Modulo' : '+ Nuova SOP'}
@@ -246,11 +312,14 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
 
       {showForm && (
         <form
-          onSubmit={handleCreateSop}
-          className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+          ref={formRef}
+          onSubmit={handleSaveSop}
+          className="p-4 sm:p-5 bg-neutral-950 border border-emerald-500/40 rounded-xl space-y-4 text-sm"
         >
           <div className="text-sm uppercase tracking-wider text-emerald-400 font-bold">
-            Nuova Procedura Standard / Checklist Ricorrente
+            {editingSopId
+              ? 'Modifica Procedura Standard / Checklist'
+              : 'Nuova Procedura Standard / Checklist Ricorrente'}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -287,10 +356,10 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
 
           <div>
             <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-              Passaggi della Checklist (scrivi un punto per riga) *
+              Passaggi della Checklist (un punto per riga) *
             </label>
             <textarea
-              rows={4}
+              rows={5}
               required
               value={rawSteps}
               onChange={(e) => setRawSteps(e.target.value)}
@@ -312,13 +381,24 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={resetForm}
+              className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+            >
+              Annulla
+            </button>
             <button
               type="submit"
               disabled={loading}
               className="min-h-[40px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
             >
-              {loading ? 'Salvataggio...' : 'Salva Procedura'}
+              {loading
+                ? 'Salvataggio...'
+                : editingSopId
+                ? 'Aggiorna Procedura'
+                : 'Salva Procedura'}
             </button>
           </div>
         </form>
@@ -391,17 +471,24 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
                   </div>
                 </div>
 
-                <div className="border-t border-neutral-800 pt-3 flex items-center justify-between gap-2">
-                  <span className="text-xs sm:text-sm text-neutral-400 italic truncate">
+                <div className="border-t border-neutral-800 pt-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs sm:text-sm text-neutral-400 italic truncate max-w-[200px] sm:max-w-[240px]">
                     {sop.notes || 'Procedura operativa attiva'}
                   </span>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditSopClick(sop)}
+                      className="min-h-[34px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-2.5 py-1 rounded-lg transition"
+                    >
+                      Modifica
+                    </button>
                     {completed > 0 && (
                       <button
                         type="button"
                         onClick={() => handleResetChecklist(sop)}
-                        className="text-xs font-bold uppercase text-amber-300 hover:text-amber-200 py-1"
+                        className="min-h-[34px] text-xs font-bold uppercase text-amber-300 hover:text-amber-200 px-2 py-1"
                       >
                         Azzera
                       </button>
@@ -409,7 +496,7 @@ export default function SopChecklists({ userEmail, onAuditUpdated }: SopChecklis
                     <button
                       type="button"
                       onClick={() => handleDeleteSop(sop)}
-                      className="text-xs font-semibold uppercase text-neutral-400 hover:text-red-400 py-1"
+                      className="min-h-[34px] text-xs font-semibold uppercase text-neutral-400 hover:text-red-400 px-2 py-1"
                     >
                       Elimina
                     </button>
