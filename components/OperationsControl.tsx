@@ -1,6 +1,6 @@
  'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
 
 export interface ActionItem {
@@ -45,6 +45,9 @@ export default function OperationsControl({
   onAuditUpdated,
 }: OperationsControlProps) {
   const supabase = useMemo(() => createClient(), [])
+  const actionFormRef = useRef<HTMLFormElement | null>(null)
+  const vendorFormRef = useRef<HTMLFormElement | null>(null)
+  const expenseFormRef = useRef<HTMLFormElement | null>(null)
 
   const [activeTab, setActiveTab] = useState<'actions' | 'vendors' | 'expenses'>('actions')
   const [loading, setLoading] = useState(false)
@@ -56,6 +59,7 @@ export default function OperationsControl({
 
   const [actionFilter, setActionFilter] = useState<'ATTIVI' | 'TUTTI' | 'COMPLETATO'>('ATTIVI')
   const [showActionForm, setShowActionForm] = useState(false)
+  const [editingActionId, setEditingActionId] = useState<string | null>(null)
   const [copiedActions, setCopiedActions] = useState(false)
   const [actionTitle, setActionTitle] = useState('')
   const [actionOwner, setActionOwner] = useState('')
@@ -66,6 +70,7 @@ export default function OperationsControl({
   const [vendorSearch, setVendorSearch] = useState('')
   const [vendorCategoryFilter, setVendorCategoryFilter] = useState('TUTTE')
   const [showVendorForm, setShowVendorForm] = useState(false)
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null)
   const [vendorName, setVendorName] = useState('')
   const [vendorCategory, setVendorCategory] = useState('NCC / Transfer')
   const [vendorCity, setVendorCity] = useState('')
@@ -76,12 +81,21 @@ export default function OperationsControl({
     'TUTTE' | 'DA RENDICONTARE' | 'INVIATO' | 'RIMBORSATO'
   >('TUTTE')
   const [showExpenseForm, setShowExpenseForm] = useState(false)
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
   const [copiedExpenses, setCopiedExpenses] = useState(false)
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [expenseDesc, setExpenseDesc] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('Trasporti / NCC')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseMissionRef, setExpenseMissionRef] = useState('')
+
+  const toLocalInputFormat = (isoString: string) => {
+    const d = new Date(isoString)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+      d.getHours()
+    )}:${pad(d.getMinutes())}`
+  }
 
   const loadAllOperations = useCallback(async () => {
     const [actionsRes, vendorsRes, expensesRes] = await Promise.all([
@@ -108,43 +122,83 @@ export default function OperationsControl({
     loadAllOperations()
   }, [loadAllOperations])
 
-  const handleAddAction = async (e: React.FormEvent) => {
+  const resetActionForm = () => {
+    setEditingActionId(null)
+    setActionTitle('')
+    setActionOwner('')
+    setActionDueDate('')
+    setActionPriority('MEDIA')
+    setActionNotes('')
+    setShowActionForm(false)
+  }
+
+  const handleEditActionClick = (item: ActionItem) => {
+    setEditingActionId(item.id)
+    setActionTitle(item.title)
+    setActionOwner(item.owner_name)
+    setActionDueDate(item.due_date ? toLocalInputFormat(item.due_date) : '')
+    setActionPriority(item.priority)
+    setActionNotes(item.notes || '')
+    setShowActionForm(true)
+    setError(null)
+    setTimeout(() => {
+      actionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveAction = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('action_items').insert([
-        {
-          title: actionTitle.trim(),
-          owner_name: actionOwner.trim(),
-          due_date: actionDueDate ? new Date(actionDueDate).toISOString() : null,
-          priority: actionPriority,
-          status: 'DA FARE',
-          notes: actionNotes.trim() || null,
-        },
-      ])
+      const payload = {
+        title: actionTitle.trim(),
+        owner_name: actionOwner.trim(),
+        due_date: actionDueDate ? new Date(actionDueDate).toISOString() : null,
+        priority: actionPriority,
+        notes: actionNotes.trim() || null,
+      }
 
-      if (insErr) throw insErr
+      if (editingActionId) {
+        const { error: updErr } = await supabase
+          .from('action_items')
+          .update(payload)
+          .eq('id', editingActionId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `DELEGA_ADD: ${actionTitle.trim()} -> ${actionOwner.trim()} [${actionPriority}]`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setActionTitle('')
-      setActionOwner('')
-      setActionDueDate('')
-      setActionPriority('MEDIA')
-      setActionNotes('')
-      setShowActionForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `DELEGA_UPDATE: ${actionTitle.trim()} -> ${actionOwner.trim()} [${actionPriority}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('action_items').insert([
+          {
+            ...payload,
+            status: 'DA FARE',
+          },
+        ])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `DELEGA_ADD: ${actionTitle.trim()} -> ${actionOwner.trim()} [${actionPriority}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetActionForm()
       await loadAllOperations()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
-      setError(err.message || 'Errore registrazione delega/task.')
+      setError(err.message || 'Errore salvataggio delega/task.')
     } finally {
       setLoading(false)
     }
@@ -182,6 +236,7 @@ export default function OperationsControl({
       setError('Errore eliminazione delega.')
       return
     }
+    if (editingActionId === item.id) resetActionForm()
     await loadAllOperations()
   }
 
@@ -214,38 +269,74 @@ export default function OperationsControl({
     }
   }
 
-  const handleAddVendor = async (e: React.FormEvent) => {
+  const resetVendorForm = () => {
+    setEditingVendorId(null)
+    setVendorName('')
+    setVendorCategory('NCC / Transfer')
+    setVendorCity('')
+    setVendorContact('')
+    setVendorNotes('')
+    setShowVendorForm(false)
+  }
+
+  const handleEditVendorClick = (v: VendorItem) => {
+    setEditingVendorId(v.id)
+    setVendorName(v.name)
+    setVendorCategory(v.category)
+    setVendorCity(v.city_area || '')
+    setVendorContact(v.contact_info || '')
+    setVendorNotes(v.reliability_notes || '')
+    setShowVendorForm(true)
+    setError(null)
+    setTimeout(() => {
+      vendorFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('vendors').insert([
-        {
-          name: vendorName.trim(),
-          category: vendorCategory,
-          city_area: vendorCity.trim() || null,
-          contact_info: vendorContact.trim() || null,
-          reliability_notes: vendorNotes.trim() || null,
-        },
-      ])
+      const payload = {
+        name: vendorName.trim(),
+        category: vendorCategory,
+        city_area: vendorCity.trim() || null,
+        contact_info: vendorContact.trim() || null,
+        reliability_notes: vendorNotes.trim() || null,
+      }
 
-      if (insErr) throw insErr
+      if (editingVendorId) {
+        const { error: updErr } = await supabase
+          .from('vendors')
+          .update(payload)
+          .eq('id', editingVendorId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `VENDOR_ADD: ${vendorName.trim()} (${vendorCategory})`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setVendorName('')
-      setVendorCategory('NCC / Transfer')
-      setVendorCity('')
-      setVendorContact('')
-      setVendorNotes('')
-      setShowVendorForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VENDOR_UPDATE: ${vendorName.trim()} (${vendorCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('vendors').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VENDOR_ADD: ${vendorName.trim()} (${vendorCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetVendorForm()
       await loadAllOperations()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -261,10 +352,35 @@ export default function OperationsControl({
       setError('Errore rimozione fornitore.')
       return
     }
+    if (editingVendorId === vendor.id) resetVendorForm()
     await loadAllOperations()
   }
 
-  const handleAddExpense = async (e: React.FormEvent) => {
+  const resetExpenseForm = () => {
+    setEditingExpenseId(null)
+    setExpenseDate(new Date().toISOString().slice(0, 10))
+    setExpenseDesc('')
+    setExpenseCategory('Trasporti / NCC')
+    setExpenseAmount('')
+    setExpenseMissionRef('')
+    setShowExpenseForm(false)
+  }
+
+  const handleEditExpenseClick = (exp: ExpenseLogItem) => {
+    setEditingExpenseId(exp.id)
+    setExpenseDate(exp.expense_date ? exp.expense_date.slice(0, 10) : new Date().toISOString().slice(0, 10))
+    setExpenseCategory(exp.category)
+    setExpenseDesc(exp.description)
+    setExpenseAmount(String(exp.amount))
+    setExpenseMissionRef(exp.mission_ref || '')
+    setShowExpenseForm(true)
+    setError(null)
+    setTimeout(() => {
+      expenseFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
@@ -275,35 +391,53 @@ export default function OperationsControl({
         throw new Error('Inserisci un importo numerico valido.')
       }
 
-      const { error: insErr } = await supabase.from('expense_logs').insert([
-        {
-          expense_date: expenseDate,
-          description: expenseDesc.trim(),
-          category: expenseCategory,
-          amount: parsedAmount,
-          mission_ref: expenseMissionRef.trim() || null,
-          reimbursement_status: 'DA RENDICONTARE',
-        },
-      ])
+      const payload = {
+        expense_date: expenseDate,
+        description: expenseDesc.trim(),
+        category: expenseCategory,
+        amount: parsedAmount,
+        mission_ref: expenseMissionRef.trim() || null,
+      }
 
-      if (insErr) throw insErr
+      if (editingExpenseId) {
+        const { error: updErr } = await supabase
+          .from('expense_logs')
+          .update(payload)
+          .eq('id', editingExpenseId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `EXPENSE_ADD: ${expenseDesc.trim()} (EUR ${parsedAmount.toFixed(2)})`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setExpenseDesc('')
-      setExpenseAmount('')
-      setExpenseMissionRef('')
-      setShowExpenseForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `EXPENSE_UPDATE: ${expenseDesc.trim()} (EUR ${parsedAmount.toFixed(2)})`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('expense_logs').insert([
+          {
+            ...payload,
+            reimbursement_status: 'DA RENDICONTARE',
+          },
+        ])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `EXPENSE_ADD: ${expenseDesc.trim()} (EUR ${parsedAmount.toFixed(2)})`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetExpenseForm()
       await loadAllOperations()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
-      setError(err.message || 'Errore registrazione spesa.')
+      setError(err.message || 'Errore salvataggio spesa.')
     } finally {
       setLoading(false)
     }
@@ -341,6 +475,7 @@ export default function OperationsControl({
       setError('Errore eliminazione voce spesa.')
       return
     }
+    if (editingExpenseId === exp.id) resetExpenseForm()
     await loadAllOperations()
   }
 
@@ -505,7 +640,13 @@ export default function OperationsControl({
               </button>
               <button
                 type="button"
-                onClick={() => setShowActionForm(!showActionForm)}
+                onClick={() => {
+                  if (showActionForm) {
+                    resetActionForm()
+                  } else {
+                    setShowActionForm(true)
+                  }
+                }}
                 className="min-h-[38px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
               >
                 {showActionForm ? 'Chiudi Modulo' : '+ Nuova Delega'}
@@ -515,11 +656,14 @@ export default function OperationsControl({
 
           {showActionForm && (
             <form
-              onSubmit={handleAddAction}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={actionFormRef}
+              onSubmit={handleSaveAction}
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
-                Nuovo Incarico / Follow-up Direzione
+                {editingActionId
+                  ? 'Modifica Incarico / Delega Direzione'
+                  : 'Nuovo Incarico / Follow-up Direzione'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
@@ -594,13 +738,24 @@ export default function OperationsControl({
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={resetActionForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Registra Delega'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingActionId
+                    ? 'Aggiorna Delega'
+                    : 'Registra Delega'}
                 </button>
               </div>
             </form>
@@ -671,6 +826,14 @@ export default function OperationsControl({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleEditActionClick(item)}
+                        className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
+                      >
+                        Modifica
+                      </button>
+
                       <select
                         aria-label="Stato delega"
                         value={item.status}
@@ -736,7 +899,13 @@ export default function OperationsControl({
 
             <button
               type="button"
-              onClick={() => setShowVendorForm(!showVendorForm)}
+              onClick={() => {
+                if (showVendorForm) {
+                  resetVendorForm()
+                } else {
+                  setShowVendorForm(true)
+                }
+              }}
               className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto"
             >
               {showVendorForm ? 'Chiudi Modulo' : '+ Nuovo Fornitore'}
@@ -745,11 +914,14 @@ export default function OperationsControl({
 
           {showVendorForm && (
             <form
-              onSubmit={handleAddVendor}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={vendorFormRef}
+              onSubmit={handleSaveVendor}
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
-                Registrazione Fornitore Selezionato
+                {editingVendorId
+                  ? 'Modifica Fornitore Selezionato'
+                  : 'Registrazione Fornitore Selezionato'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -825,13 +997,24 @@ export default function OperationsControl({
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={resetVendorForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Salva Fornitore'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingVendorId
+                    ? 'Aggiorna Fornitore'
+                    : 'Salva Fornitore'}
                 </button>
               </div>
             </form>
@@ -864,13 +1047,22 @@ export default function OperationsControl({
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteVendor(v)}
-                    className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase shrink-0 py-1"
-                  >
-                    Rimuovi
-                  </button>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditVendorClick(v)}
+                      className="text-indigo-300 hover:text-indigo-200 text-xs font-bold uppercase py-1"
+                    >
+                      Modifica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteVendor(v)}
+                      className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase py-1"
+                    >
+                      Rimuovi
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -934,7 +1126,13 @@ export default function OperationsControl({
               )}
               <button
                 type="button"
-                onClick={() => setShowExpenseForm(!showExpenseForm)}
+                onClick={() => {
+                  if (showExpenseForm) {
+                    resetExpenseForm()
+                  } else {
+                    setShowExpenseForm(true)
+                  }
+                }}
                 className="min-h-[38px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
               >
                 {showExpenseForm ? 'Chiudi Modulo' : '+ Registra Spesa'}
@@ -944,11 +1142,14 @@ export default function OperationsControl({
 
           {showExpenseForm && (
             <form
-              onSubmit={handleAddExpense}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={expenseFormRef}
+              onSubmit={handleSaveExpense}
+              className="p-4 sm:p-5 bg-neutral-950 border border-indigo-400/40 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
-                Nuova Voce di Spesa Operativa / Rappresentanza
+                {editingExpenseId
+                  ? 'Modifica Voce di Spesa'
+                  : 'Nuova Voce di Spesa Operativa / Rappresentanza'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5">
@@ -1027,13 +1228,26 @@ export default function OperationsControl({
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50 shrink-0"
-                >
-                  {loading ? 'Salvataggio...' : 'Registra Spesa'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={resetExpenseForm}
+                    className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="min-h-[40px] bg-indigo-400 hover:bg-indigo-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
+                  >
+                    {loading
+                      ? 'Salvataggio...'
+                      : editingExpenseId
+                      ? 'Aggiorna Spesa'
+                      : 'Registra Spesa'}
+                  </button>
+                </div>
               </div>
             </form>
           )}
@@ -1074,6 +1288,14 @@ export default function OperationsControl({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditExpenseClick(exp)}
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
+                    >
+                      Modifica
+                    </button>
+
                     <select
                       aria-label="Stato rimborso"
                       value={exp.reimbursement_status}
