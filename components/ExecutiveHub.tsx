@@ -1,6 +1,6 @@
  'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
 
 export interface ExecutiveContact {
@@ -32,6 +32,8 @@ interface ExecutiveHubProps {
 
 export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHubProps) {
   const supabase = useMemo(() => createClient(), [])
+  const contactFormRef = useRef<HTMLFormElement | null>(null)
+  const prefFormRef = useRef<HTMLFormElement | null>(null)
 
   const [activeTab, setActiveTab] = useState<'contacts' | 'preferences'>('contacts')
   const [contacts, setContacts] = useState<ExecutiveContact[]>([])
@@ -44,6 +46,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     'TUTTI' | 'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
   >('TUTTI')
   const [showContactForm, setShowContactForm] = useState(false)
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [contactName, setContactName] = useState('')
   const [contactOrg, setContactOrg] = useState('')
   const [contactRole, setContactRole] = useState('')
@@ -60,6 +63,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
   const [prefCategoryFilter, setPrefCategoryFilter] = useState('TUTTE')
   const [showPrefForm, setShowPrefForm] = useState(false)
+  const [editingPrefId, setEditingPrefId] = useState<string | null>(null)
   const [prefCategory, setPrefCategory] = useState('Viaggi & Voli')
   const [prefTitle, setPrefTitle] = useState('')
   const [prefDetails, setPrefDetails] = useState('')
@@ -78,46 +82,86 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     loadExecutiveData()
   }, [loadExecutiveData])
 
-  const handleAddContact = async (e: React.FormEvent) => {
+  const resetContactForm = () => {
+    setEditingContactId(null)
+    setContactName('')
+    setContactOrg('')
+    setContactRole('')
+    setContactCategory('Cliente / Partner')
+    setContactTier('FILTRO SEGRETERIA')
+    setContactNda('NON RICHIESTO')
+    setContactPhone('')
+    setContactEmail('')
+    setContactNotes('')
+    setShowContactForm(false)
+  }
+
+  const handleEditContactClick = (c: ExecutiveContact) => {
+    setEditingContactId(c.id)
+    setContactName(c.full_name)
+    setContactOrg(c.organization || '')
+    setContactRole(c.role_title || '')
+    setContactCategory(c.category || 'Cliente / Partner')
+    setContactTier(c.access_tier)
+    setContactNda(c.nda_status)
+    setContactPhone(c.phone || '')
+    setContactEmail(c.email || '')
+    setContactNotes(c.relationship_notes || '')
+    setShowContactForm(true)
+    setError(null)
+    setTimeout(() => {
+      contactFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('executive_contacts').insert([
-        {
-          full_name: contactName.trim(),
-          organization: contactOrg.trim() || null,
-          role_title: contactRole.trim() || null,
-          category: contactCategory,
-          access_tier: contactTier,
-          nda_status: contactNda,
-          phone: contactPhone.trim() || null,
-          email: contactEmail.trim() || null,
-          relationship_notes: contactNotes.trim() || null,
-        },
-      ])
+      const payload = {
+        full_name: contactName.trim(),
+        organization: contactOrg.trim() || null,
+        role_title: contactRole.trim() || null,
+        category: contactCategory,
+        access_tier: contactTier,
+        nda_status: contactNda,
+        phone: contactPhone.trim() || null,
+        email: contactEmail.trim() || null,
+        relationship_notes: contactNotes.trim() || null,
+      }
 
-      if (insErr) throw insErr
+      if (editingContactId) {
+        const { error: updErr } = await supabase
+          .from('executive_contacts')
+          .update(payload)
+          .eq('id', editingContactId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setContactName('')
-      setContactOrg('')
-      setContactRole('')
-      setContactCategory('Cliente / Partner')
-      setContactTier('FILTRO SEGRETERIA')
-      setContactNda('NON RICHIESTO')
-      setContactPhone('')
-      setContactEmail('')
-      setContactNotes('')
-      setShowContactForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `CONTACT_UPDATE: ${contactName.trim()} [${contactTier}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('executive_contacts').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetContactForm()
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -164,6 +208,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       return
     }
 
+    if (editingContactId === contact.id) {
+      resetContactForm()
+    }
+
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
@@ -176,33 +224,68 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     if (onAuditUpdated) onAuditUpdated()
   }
 
-  const handleAddPreference = async (e: React.FormEvent) => {
+  const resetPrefForm = () => {
+    setEditingPrefId(null)
+    setPrefCategory('Viaggi & Voli')
+    setPrefTitle('')
+    setPrefDetails('')
+    setShowPrefForm(false)
+  }
+
+  const handleEditPrefClick = (p: VipPreference) => {
+    setEditingPrefId(p.id)
+    setPrefCategory(p.category)
+    setPrefTitle(p.title)
+    setPrefDetails(p.details)
+    setShowPrefForm(true)
+    setError(null)
+    setTimeout(() => {
+      prefFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSavePreference = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('vip_preferences').insert([
-        {
-          category: prefCategory,
-          title: prefTitle.trim(),
-          details: prefDetails.trim(),
-        },
-      ])
+      const payload = {
+        category: prefCategory,
+        title: prefTitle.trim(),
+        details: prefDetails.trim(),
+      }
 
-      if (insErr) throw insErr
+      if (editingPrefId) {
+        const { error: updErr } = await supabase
+          .from('vip_preferences')
+          .update(payload)
+          .eq('id', editingPrefId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setPrefTitle('')
-      setPrefDetails('')
-      setShowPrefForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VIP_PREF_UPDATE: ${prefTitle.trim()} (${prefCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('vip_preferences').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetPrefForm()
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -221,6 +304,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     if (delErr) {
       setError('Errore rimozione preferenza.')
       return
+    }
+
+    if (editingPrefId === pref.id) {
+      resetPrefForm()
     }
 
     await supabase.from('audit_logs').insert([
@@ -355,7 +442,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => setShowContactForm(!showContactForm)}
+              onClick={() => {
+                if (showContactForm) {
+                  resetContactForm()
+                } else {
+                  setShowContactForm(true)
+                }
+              }}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto shrink-0"
             >
               {showContactForm ? 'Chiudi Modulo' : '+ Nuovo Contatto'}
@@ -364,11 +457,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showContactForm && (
             <form
-              onSubmit={handleAddContact}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={contactFormRef}
+              onSubmit={handleSaveContact}
+              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/40 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                Nuovo Profilo Rubrica Strategica &amp; Gatekeeping
+                {editingContactId
+                  ? 'Modifica Profilo Rubrica Strategica'
+                  : 'Nuovo Profilo Rubrica Strategica & Gatekeeping'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -510,13 +606,24 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 </div>
               </div>
 
-              <div className="flex justify-end pt-1">
+              <div className="flex flex-wrap justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={resetContactForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Salva in Rubrica'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingContactId
+                    ? 'Aggiorna Contatto'
+                    : 'Salva in Rubrica'}
                 </button>
               </div>
             </form>
@@ -586,6 +693,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditContactClick(c)}
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
+                    >
+                      Modifica
+                    </button>
+
                     <select
                       aria-label="Livello gatekeeping"
                       value={c.access_tier}
@@ -652,7 +767,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => setShowPrefForm(!showPrefForm)}
+              onClick={() => {
+                if (showPrefForm) {
+                  resetPrefForm()
+                } else {
+                  setShowPrefForm(true)
+                }
+              }}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition"
             >
               {showPrefForm ? 'Chiudi Modulo' : '+ Nuova Preferenza'}
@@ -661,11 +782,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showPrefForm && (
             <form
-              onSubmit={handleAddPreference}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={prefFormRef}
+              onSubmit={handleSavePreference}
+              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/40 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                Nuovo Standard / Preferenza Permanente Direzione
+                {editingPrefId
+                  ? 'Modifica Standard / Preferenza Direzione'
+                  : 'Nuovo Standard / Preferenza Permanente Direzione'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -705,7 +829,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   Dettagli &amp; Standard Richiesti *
                 </label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   required
                   value={prefDetails}
                   onChange={(e) => setPrefDetails(e.target.value)}
@@ -714,13 +838,24 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={resetPrefForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Registra Preferenza'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingPrefId
+                    ? 'Aggiorna Preferenza'
+                    : 'Registra Preferenza'}
                 </button>
               </div>
             </form>
@@ -743,13 +878,22 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePreference(p)}
-                    className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase shrink-0 py-1"
-                  >
-                    Rimuovi
-                  </button>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditPrefClick(p)}
+                      className="text-amber-300 hover:text-amber-200 text-xs font-bold uppercase py-1"
+                    >
+                      Modifica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePreference(p)}
+                      className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase py-1"
+                    >
+                      Rimuovi
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
