@@ -1,6 +1,6 @@
  'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../utils/supabase/client'
 
@@ -938,6 +938,7 @@ export default function MissionBoard({
 }: MissionBoardProps) {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
+  const missionFormRef = useRef<HTMLFormElement | null>(null)
 
   const [missions, setMissions] = useState<Mission[]>(initialMissions)
   const [operators, setOperators] = useState<OperatorOption[]>([])
@@ -948,6 +949,7 @@ export default function MissionBoard({
   const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
   const [onlyMine, setOnlyMine] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [editingMissionId, setEditingMissionId] = useState<string | null>(null)
   const [showFleet, setShowFleet] = useState(false)
   const [showMorningBrief, setShowMorningBrief] = useState(false)
   const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
@@ -1001,6 +1003,16 @@ export default function MissionBoard({
       .replace(/"/g, '&quot;')
       .replace(/\n/g, '<br/>')
 
+  const toLocalInputFormat = (isoString: string) => {
+    if (!isoString) return ''
+    const d = new Date(isoString)
+    if (Number.isNaN(d.getTime())) return ''
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+      d.getHours()
+    )}:${pad(d.getMinutes())}`
+  }
+
   const formatIcsDate = (isoString: string) => {
     return new Date(isoString).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
   }
@@ -1029,6 +1041,77 @@ export default function MissionBoard({
     },
     [operators]
   )
+
+  const resetMissionForm = () => {
+    setEditingMissionId(null)
+    setClientVip('')
+    setStartTime('')
+    setEndTime('')
+    setPickupPoint('')
+    setDropoffPoint('')
+    setAssignedOperatorId('')
+    setAssignedVehicleId('')
+    setManualVehicle('')
+    setNotes('')
+    setDraftLegs([])
+    setAutoAiOnCreate(true)
+    setShowForm(false)
+  }
+
+  const handleEditMission = (mission: Mission) => {
+    setError(null)
+    setEditingMissionId(mission.id)
+    setClientVip(mission.client_vip || '')
+    setStartTime(toLocalInputFormat(mission.start_time))
+    setEndTime(toLocalInputFormat(mission.end_time))
+    setPickupPoint(mission.pickup_point || '')
+    setDropoffPoint(mission.dropoff_point || '')
+    setAssignedOperatorId(mission.assigned_operator_id || '')
+
+    const hasMatchedFleetVeh =
+      mission.assigned_vehicle_id &&
+      vehicles.some((v) => v.id === mission.assigned_vehicle_id)
+
+    if (vehicles.length > 0) {
+      if (hasMatchedFleetVeh && mission.assigned_vehicle_id) {
+        setAssignedVehicleId(mission.assigned_vehicle_id)
+        setManualVehicle(mission.assigned_vehicle || '')
+      } else if (mission.assigned_vehicle) {
+        setAssignedVehicleId('__KEEP_EXISTING__')
+        setManualVehicle(mission.assigned_vehicle)
+      } else {
+        setAssignedVehicleId('')
+        setManualVehicle('')
+      }
+    } else {
+      setAssignedVehicleId('')
+      setManualVehicle(mission.assigned_vehicle || '')
+    }
+
+    setNotes(mission.notes || '')
+    setDraftLegs(
+      Array.isArray(mission.route_legs)
+        ? mission.route_legs.map((leg, idx) => ({
+            id: `leg_edit_${mission.id}_${idx}_${Date.now()}`,
+            transport_mode: leg.transport_mode || 'Auto / NCC',
+            origin: leg.origin || '',
+            destination: leg.destination || '',
+            carrier_code: leg.carrier_code || '',
+            departure_time: leg.departure_time ? toLocalInputFormat(leg.departure_time) : '',
+            arrival_time: leg.arrival_time ? toLocalInputFormat(leg.arrival_time) : '',
+            notes: leg.notes || '',
+          }))
+        : []
+    )
+    setAutoAiOnCreate(false)
+    setShowFleet(false)
+    setShowMorningBrief(false)
+    setShowForm(true)
+
+    setTimeout(() => {
+      missionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
 
   const handleAddDraftLeg = () => {
     const previousEnd =
@@ -1773,16 +1856,28 @@ export default function MissionBoard({
     if (onAuditUpdated) onAuditUpdated()
   }
 
-  const handleCreateMission = async (e: React.FormEvent) => {
+  const handleSaveMission = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const selectedVeh = vehicles.find((v) => v.id === assignedVehicleId)
-      const vehicleSummary = selectedVeh
-        ? `[${selectedVeh.callsign}] ${selectedVeh.model} (${selectedVeh.plate})`
-        : manualVehicle.trim()
+      let vehicleSummary = ''
+      let vehicleIdToSave: string | null = null
+
+      if (assignedVehicleId === '__KEEP_EXISTING__') {
+        vehicleSummary = manualVehicle.trim()
+        vehicleIdToSave = null
+      } else {
+        const selectedVeh = vehicles.find((v) => v.id === assignedVehicleId)
+        if (selectedVeh) {
+          vehicleSummary = `[${selectedVeh.callsign}] ${selectedVeh.model} (${selectedVeh.plate})`
+          vehicleIdToSave = selectedVeh.id
+        } else {
+          vehicleSummary = manualVehicle.trim()
+          vehicleIdToSave = null
+        }
+      }
 
       if (!vehicleSummary) {
         throw new Error('Seleziona un mezzo dalla flotta o inserisci una descrizione.')
@@ -1801,61 +1896,95 @@ export default function MissionBoard({
           notes: l.notes.trim() || undefined,
         }))
 
-      const { data, error: insertError } = await supabase
-        .from('missions')
-        .insert([
-          {
-            client_vip: clientVip,
+      const shouldRunAi = autoAiOnCreate
+      let savedMission: Mission | null = null
+
+      if (editingMissionId) {
+        const { data, error: updateError } = await supabase
+          .from('missions')
+          .update({
+            client_vip: clientVip.trim(),
             start_time: new Date(startTime).toISOString(),
             end_time: new Date(endTime).toISOString(),
-            pickup_point: pickupPoint,
-            dropoff_point: dropoffPoint,
+            pickup_point: pickupPoint.trim(),
+            dropoff_point: dropoffPoint.trim(),
             assigned_vehicle: vehicleSummary,
-            assigned_vehicle_id: selectedVeh ? selectedVeh.id : null,
+            assigned_vehicle_id: vehicleIdToSave,
             assigned_operator_id: assignedOperatorId || null,
-            status: 'pianificata',
             notes: notes.trim() || null,
             route_legs: normalizedLegs,
-            created_by: userId,
+          })
+          .eq('id', editingMissionId)
+          .select()
+          .single()
+
+        if (updateError) throw updateError
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `MISSION_UPDATE (${clientVip.trim()}${
+              normalizedLegs.length > 0 ? ` - ${normalizedLegs.length} tappe` : ''
+            })`,
+            status: 'SUCCESS',
           },
         ])
-        .select()
-        .single()
 
-      if (insertError) throw insertError
+        savedMission = data as Mission | null
+        if (savedMission) {
+          setMissions((prev) =>
+            prev.map((m) => (m.id === savedMission!.id ? savedMission! : m))
+          )
+        }
+      } else {
+        const { data, error: insertError } = await supabase
+          .from('missions')
+          .insert([
+            {
+              client_vip: clientVip.trim(),
+              start_time: new Date(startTime).toISOString(),
+              end_time: new Date(endTime).toISOString(),
+              pickup_point: pickupPoint.trim(),
+              dropoff_point: dropoffPoint.trim(),
+              assigned_vehicle: vehicleSummary,
+              assigned_vehicle_id: vehicleIdToSave,
+              assigned_operator_id: assignedOperatorId || null,
+              status: 'pianificata',
+              notes: notes.trim() || null,
+              route_legs: normalizedLegs,
+              created_by: userId,
+            },
+          ])
+          .select()
+          .single()
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `MISSION_CREATE (${clientVip}${normalizedLegs.length > 0 ? ` - ${normalizedLegs.length} tappe` : ''})`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (insertError) throw insertError
 
-      const createdMission = data as Mission | null
-      if (createdMission) {
-        setMissions((prev) => [createdMission, ...prev])
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `MISSION_CREATE (${clientVip.trim()}${
+              normalizedLegs.length > 0 ? ` - ${normalizedLegs.length} tappe` : ''
+            })`,
+            status: 'SUCCESS',
+          },
+        ])
+
+        savedMission = data as Mission | null
+        if (savedMission) {
+          setMissions((prev) => [savedMission!, ...prev])
+        }
       }
 
-      setClientVip('')
-      setStartTime('')
-      setEndTime('')
-      setPickupPoint('')
-      setDropoffPoint('')
-      setAssignedOperatorId('')
-      setAssignedVehicleId('')
-      setManualVehicle('')
-      setNotes('')
-      setDraftLegs([])
-      setShowForm(false)
+      resetMissionForm()
       if (onAuditUpdated) onAuditUpdated()
       router.refresh()
 
-      if (createdMission && autoAiOnCreate) {
-        await runAiRouteRiskAnalysis(createdMission)
+      if (savedMission && shouldRunAi) {
+        await runAiRouteRiskAnalysis(savedMission)
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Errore durante la creazione della missione.'))
+      setError(getErrorMessage(err, 'Errore durante il salvataggio della missione.'))
     } finally {
       setLoading(false)
     }
@@ -1940,6 +2069,10 @@ export default function MissionBoard({
       setMissions(previous)
       setError('Errore nella rimozione della missione.')
       return
+    }
+
+    if (editingMissionId === missionId) {
+      resetMissionForm()
     }
 
     await supabase.from('audit_logs').insert([
@@ -2027,7 +2160,7 @@ export default function MissionBoard({
                   setShowMorningBrief(!showMorningBrief)
                   if (!showMorningBrief) {
                     setShowFleet(false)
-                    setShowForm(false)
+                    resetMissionForm()
                   }
                 }}
                 className="min-h-[38px] bg-neutral-950 hover:bg-neutral-800 text-amber-300 border border-amber-700/80 text-xs uppercase tracking-wider px-3.5 py-1.5 rounded-lg transition font-semibold"
@@ -2039,7 +2172,7 @@ export default function MissionBoard({
                 onClick={() => {
                   setShowFleet(!showFleet)
                   if (!showFleet) {
-                    setShowForm(false)
+                    resetMissionForm()
                     setShowMorningBrief(false)
                   }
                 }}
@@ -2050,15 +2183,19 @@ export default function MissionBoard({
               <button
                 type="button"
                 onClick={() => {
-                  setShowForm(!showForm)
-                  if (!showForm) {
+                  if (showForm) {
+                    resetMissionForm()
+                  } else {
+                    setEditingMissionId(null)
+                    setAutoAiOnCreate(true)
                     setShowFleet(false)
                     setShowMorningBrief(false)
+                    setShowForm(true)
                   }
                 }}
                 className="min-h-[38px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-1.5 rounded-lg transition"
               >
-                {showForm ? 'Chiudi' : '+ Nuova Missione'}
+                {showForm ? 'Chiudi Modulo' : '+ Nuova Missione'}
               </button>
             </>
           )}
@@ -2215,11 +2352,14 @@ export default function MissionBoard({
 
       {isAdmin && showForm && (
         <form
-          onSubmit={handleCreateMission}
-          className="mt-5 p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+          ref={missionFormRef}
+          onSubmit={handleSaveMission}
+          className="mt-5 p-4 sm:p-5 bg-neutral-950 border border-emerald-500/50 rounded-xl space-y-4 text-sm"
         >
           <div className="text-sm uppercase tracking-wider text-emerald-400 font-bold">
-            Nuovo Ordine di Servizio / Trasferta Multimodale
+            {editingMissionId
+              ? 'Modifica Ordine di Servizio / Trasferta Multimodale'
+              : 'Nuovo Ordine di Servizio / Trasferta Multimodale'}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -2268,6 +2408,9 @@ export default function MissionBoard({
                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 >
                   <option value="">-- Seleziona veicolo dal registro --</option>
+                  {editingMissionId && manualVehicle && (
+                    <option value="__KEEP_EXISTING__">Attuale: {manualVehicle}</option>
+                  )}
                   {vehicles.map((v) => (
                     <option key={v.id} value={v.id}>
                       [{v.callsign}] {v.model} - {v.plate} ({v.category})
@@ -2350,7 +2493,7 @@ export default function MissionBoard({
                   Piano di Viaggio &amp; Tappe Multimodali (Auto, Treno, Volo, Scali)
                 </div>
                 <p className="text-xs sm:text-sm text-neutral-400">
-                  Aggiungi ogni segmento del viaggio per l&apos;analisi AI completa
+                  Aggiungi o modifica ogni segmento del viaggio per l&apos;analisi AI completa
                 </p>
               </div>
               <button
@@ -2522,17 +2665,32 @@ export default function MissionBoard({
                 className="accent-sky-400 w-4 h-4 shrink-0"
               />
               <span>
-                Elabora automaticamente Valutazione Rischio AI Real-Time (Tappe, Profilo Paese, Safe Havens &amp; Piano B)
+                {editingMissionId
+                  ? 'Ricalcola automaticamente Valutazione Rischio AI Real-Time al salvataggio'
+                  : 'Elabora automaticamente Valutazione Rischio AI Real-Time (Tappe, Profilo Paese, Safe Havens & Piano B)'}
               </span>
             </label>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="min-h-[42px] bg-white hover:bg-neutral-200 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-5 py-2 rounded-lg transition disabled:opacity-50 shrink-0"
-            >
-              {loading ? 'Registrazione...' : 'Conferma e Registra'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={resetMissionForm}
+                className="min-h-[42px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="min-h-[42px] bg-white hover:bg-neutral-200 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-5 py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {loading
+                  ? 'Salvataggio...'
+                  : editingMissionId
+                  ? 'Aggiorna Missione'
+                  : 'Conferma e Registra'}
+              </button>
+            </div>
           </div>
         </form>
       )}
@@ -2830,6 +2988,16 @@ export default function MissionBoard({
                     >
                       .ICS
                     </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleEditMission(mission)}
+                        className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border-neutral-700"
+                      >
+                        Modifica
+                      </button>
+                    )}
 
                     {isAdmin && (
                       <select
