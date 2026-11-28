@@ -352,6 +352,7 @@ export default function DashboardPage() {
 
   const opsControlProps = {
     userEmail: user.email || '',
+    isAdmin,
     onAuditUpdated: handleControlRoomSync,
   } as Parameters<typeof OperationsControl>[0]
 
@@ -423,7 +424,7 @@ export default function DashboardPage() {
               </h1>
               <p className="text-xs sm:text-sm text-neutral-400 mt-1">
                 {isExecutive
-                  ? 'Agenda Appuntamenti & Rubrica Strategica • Connessione Sicura'
+                  ? 'Agenda Appuntamenti, Rubrica Strategica & Deleghe • Connessione Sicura'
                   : 'Control Room Operativa • Connessione Sicura'}
               </p>
             </div>
@@ -740,7 +741,7 @@ export default function DashboardPage() {
         )}
 
         {/* 5. DELEGHE, TASK & NOTA SPESE */}
-        {isAdmin && <OperationsControl {...opsControlProps} />}
+        {canAccessExecutivePanels && <OperationsControl {...opsControlProps} />}
 
         {/* 6. PROCEDURE OPERATIVE / SOP */}
         {!isExecutive && <SopChecklists {...sopProps} />}
