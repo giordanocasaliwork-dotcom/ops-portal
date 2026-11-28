@@ -31,8 +31,8 @@ export interface OperationalSite {
   callsign: string
   name: string
   address: string
-  maps_url: string | null
   site_type: string
+  maps_url?: string | null
   notes: string | null
 }
 
@@ -77,14 +77,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
   const [prefTitle, setPrefTitle] = useState('')
   const [prefDetails, setPrefDetails] = useState('')
 
-  const [siteSearch, setSiteSearch] = useState('')
   const [showSiteForm, setShowSiteForm] = useState(false)
   const [editingSiteId, setEditingSiteId] = useState<string | null>(null)
   const [siteCallsign, setSiteCallsign] = useState('')
   const [siteName, setSiteName] = useState('')
   const [siteAddress, setSiteAddress] = useState('')
-  const [siteMapsUrl, setSiteMapsUrl] = useState('')
   const [siteType, setSiteType] = useState('Ufficio / Sede Centrale')
+  const [siteMapsUrl, setSiteMapsUrl] = useState('')
   const [siteNotes, setSiteNotes] = useState('')
 
   const loadExecutiveData = useCallback(async () => {
@@ -102,6 +101,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
   useEffect(() => {
     loadExecutiveData()
   }, [loadExecutiveData])
+
+  const getSiteMapsHref = (site: OperationalSite) => {
+    if (site.maps_url && site.maps_url.trim().startsWith('http')) {
+      return site.maps_url.trim()
+    }
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(site.address)}`
+  }
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -265,8 +271,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     setSiteCallsign('')
     setSiteName('')
     setSiteAddress('')
-    setSiteMapsUrl('')
     setSiteType('Ufficio / Sede Centrale')
+    setSiteMapsUrl('')
     setSiteNotes('')
     setShowSiteForm(false)
   }
@@ -277,8 +283,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     setSiteCallsign(site.callsign)
     setSiteName(site.name)
     setSiteAddress(site.address)
-    setSiteMapsUrl(site.maps_url || '')
     setSiteType(site.site_type || 'Ufficio / Sede Centrale')
+    setSiteMapsUrl(site.maps_url || '')
     setSiteNotes(site.notes || '')
     setShowSiteForm(true)
     setTimeout(() => {
@@ -293,13 +299,12 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
     try {
       const cleanCallsign = siteCallsign.trim().toUpperCase()
-      const cleanMapsUrl = siteMapsUrl.trim() || null
       const payload = {
         callsign: cleanCallsign,
         name: siteName.trim(),
         address: siteAddress.trim(),
-        maps_url: cleanMapsUrl,
         site_type: siteType,
+        maps_url: siteMapsUrl.trim() || null,
         notes: siteNotes.trim() || null,
       }
 
@@ -336,7 +341,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
-      setError(err.message || 'Errore salvataggio sede / luogo.')
+      setError(err.message || 'Errore salvataggio sede / callsign.')
     } finally {
       setLoading(false)
     }
@@ -377,13 +382,6 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     return hay.includes(q)
   })
 
-  const filteredSites = sites.filter((s) => {
-    if (!siteSearch.trim()) return true
-    const q = siteSearch.toLowerCase()
-    const hay = `${s.callsign} ${s.name} ${s.address} ${s.site_type} ${s.notes || ''}`.toLowerCase()
-    return hay.includes(q)
-  })
-
   const filteredPreferences = preferences.filter((p) =>
     prefCategoryFilter === 'TUTTE' ? true : p.category === prefCategoryFilter
   )
@@ -413,11 +411,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
               Direzione
             </span>
             <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
-              Gatekeeping, Rubrica, Registro Sedi &amp; Preferenze VIP
+              Gatekeeping, Rubrica Strategica, Registro Sedi &amp; Preferenze VIP
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-            Regole filtro chiamate, registro sedi/luoghi con Callsign e link Maps, e standard Direzione
+            Regole filtro chiamate, registro sedi/luoghi frequenti con link Maps e standard operativi Direzione
           </p>
         </div>
 
@@ -445,7 +443,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
-            Registro Sedi / Luoghi ({sites.length})
+            Registro Sedi/Luoghi ({sites.length})
           </button>
 
           <button
@@ -775,14 +773,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
       {activeTab === 'sites' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <input
-              type="text"
-              value={siteSearch}
-              onChange={(e) => setSiteSearch(e.target.value)}
-              placeholder="Cerca callsign, sede, indirizzo..."
-              className="bg-neutral-950 border border-neutral-700 rounded-lg px-3.5 py-2 text-base sm:text-sm text-white w-full sm:w-72 focus:outline-none focus:border-amber-400"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <p className="text-xs sm:text-sm text-neutral-300">
+              Censisci uffici, filiali, residenze e luoghi frequenti con <strong>Callsign</strong> e link diretto Google Maps per richiamarli subito in Appuntamenti e Missioni.
+            </p>
 
             <button
               type="button"
@@ -794,7 +788,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   setShowSiteForm(true)
                 }
               }}
-              className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start sm:self-auto shrink-0"
+              className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition shrink-0"
             >
               {showSiteForm ? 'Chiudi Modulo' : '+ Nuova Sede / Luogo'}
             </button>
@@ -808,8 +802,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
                 {editingSiteId
-                  ? 'Modifica Sede / Luogo Registrato'
-                  : 'Registrazione Nuova Sede / Luogo Ricorrente'}
+                  ? 'Modifica Sede / Luogo Operativo'
+                  : 'Registrazione Nuova Sede / Luogo nel Registro'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
@@ -822,7 +816,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     required
                     value={siteCallsign}
                     onChange={(e) => setSiteCallsign(e.target.value.toUpperCase())}
-                    placeholder="Es. HQ-EUR / RES-S / FCO"
+                    placeholder="Es. HQ-EUR / RES-S / FCO-VIP"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 font-mono text-base sm:text-sm text-white uppercase"
                   />
                 </div>
@@ -836,14 +830,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     required
                     value={siteName}
                     onChange={(e) => setSiteName(e.target.value)}
-                    placeholder="Es. Seven Holding S.p.A. — Sede Centrale"
+                    placeholder="Es. Seven Holding S.p.A. — Sede Principale"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Tipologia
+                    Tipologia Sito
                   </label>
                   <select
                     value={siteType}
@@ -853,8 +847,9 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
                     <option value="Ufficio Secondario / Filiale">Ufficio Secondario / Filiale</option>
                     <option value="Residenza Privata">Residenza Privata</option>
-                    <option value="Aeroporto / Stazione / Hub">Aeroporto / Stazione / Hub</option>
-                    <option value="Hotel / Ristorante / Altro">Hotel / Ristorante / Altro</option>
+                    <option value="Aeroporto / Stazione / FBO">Aeroporto / Stazione / FBO</option>
+                    <option value="Hotel / Ristorante Riservato">Hotel / Ristorante Riservato</option>
+                    <option value="Hub Logistico / Altro">Hub Logistico / Altro</option>
                   </select>
                 </div>
 
@@ -874,13 +869,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
                 <div className="md:col-span-2">
                   <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Link Diretto Google Maps (Pin Esatto / Varco)
+                    Link Diretto Google Maps (Opzionale — altrimenti generato dall&apos;indirizzo)
                   </label>
                   <input
                     type="url"
                     value={siteMapsUrl}
                     onChange={(e) => setSiteMapsUrl(e.target.value)}
-                    placeholder="https://maps.app.goo.gl/... oppure https://www.google.com/maps/..."
+                    placeholder="https://maps.google.com/..."
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
@@ -922,78 +917,64 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
             </form>
           )}
 
-          {filteredSites.length > 0 ? (
+          {sites.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
-              {filteredSites.map((s) => {
-                const resolvedHref =
-                  s.maps_url && s.maps_url.trim()
-                    ? s.maps_url.trim()
-                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        s.address
-                      )}`
-
-                return (
-                  <div
-                    key={s.id}
-                    className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between gap-3"
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-md bg-amber-400 text-neutral-950 font-mono text-xs font-bold uppercase">
-                          {s.callsign}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 font-medium">
-                          {s.site_type}
-                        </span>
-                        {s.maps_url && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-700/70 text-[11px] text-emerald-300 font-semibold uppercase">
-                            Pin Maps Salvato
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-base sm:text-lg font-bold text-white">{s.name}</div>
-
-                      <div className="flex flex-wrap items-center gap-2 text-neutral-200">
-                        <span>{s.address}</span>
-                        <a
-                          href={resolvedHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
-                        >
-                          Maps ↗
-                        </a>
-                      </div>
-
-                      {s.notes && (
-                        <div className="text-neutral-300 italic text-xs sm:text-sm">{s.notes}</div>
-                      )}
+              {sites.map((s) => (
+                <div
+                  key={s.id}
+                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between gap-3"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-amber-400 text-neutral-950 font-mono text-xs font-bold uppercase">
+                        {s.callsign}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 font-medium">
+                        {s.site_type}
+                      </span>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 border-t border-neutral-800/80 pt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEditSite(s)}
-                        className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase"
+                    <div className="text-base sm:text-lg font-bold text-white">{s.name}</div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-neutral-200">
+                      <span>{s.address}</span>
+                      <a
+                        href={getSiteMapsHref(s)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
                       >
-                        Modifica
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSite(s)}
-                        className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-red-950/70 border border-neutral-800 hover:border-red-800 text-neutral-400 hover:text-red-300 text-xs font-semibold uppercase"
-                      >
-                        Elimina
-                      </button>
+                        Maps ↗
+                      </a>
                     </div>
+
+                    {s.notes && (
+                      <div className="text-neutral-300 italic text-xs sm:text-sm">{s.notes}</div>
+                    )}
                   </div>
-                )
-              })}
+
+                  <div className="flex items-center justify-end gap-2 border-t border-neutral-800/80 pt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleEditSite(s)}
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase"
+                    >
+                      Modifica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSite(s)}
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-red-950/70 border border-neutral-800 hover:border-red-800 text-neutral-400 hover:text-red-300 text-xs font-semibold uppercase"
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
-              Nessuna sede trovata nel registro. Clicca su &quot;+ Nuova Sede / Luogo&quot; per registrare uffici, residenze o hub ricorrenti.
+              Nessuna sede censita. Clicca su &quot;+ Nuova Sede / Luogo&quot; per registrare indirizzi e coordinate.
             </div>
           )}
         </div>
@@ -1087,7 +1068,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   required
                   value={prefDetails}
                   onChange={(e) => setPrefDetails(e.target.value)}
-                  placeholder="Specifiche esatte, link Maps, presidi FFOO/DEA H24 e protocolli da applicare"
+                  placeholder="Specifiche esatte, presidi FFOO/DEA H24 e protocolli da applicare"
                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
@@ -1116,7 +1097,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                       {p.category}
                     </span>
                     <div className="text-base font-bold text-white">{p.title}</div>
-                    <div className="text-neutral-200 whitespace-pre-line leading-relaxed break-words">
+                    <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
                       {p.details}
                     </div>
                   </div>
