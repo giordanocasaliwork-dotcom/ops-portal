@@ -71,6 +71,15 @@ export interface ExecutiveBrief {
   updated_at?: string
 }
 
+interface SiteOption {
+  id: string
+  callsign: string
+  name: string
+  address: string
+  site_type: string
+  maps_url: string | null
+}
+
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
   if (typeof err === 'object' && err !== null && 'message' in err) {
@@ -491,6 +500,8 @@ interface MissionRiskPanelProps {
   isAnalyzingAi: boolean
   userEmail: string
   userId: string
+  resolveMapsUrl: (query: string) => string
+  buildMapsRouteUrl: (origin: string, destination: string) => string
   onRunAiAnalysis: () => void
   onPrintMission: () => void
   onRiskSaved: (missionId: string, updated: RiskAssessment) => void
@@ -514,6 +525,8 @@ function MissionRiskPanel({
   isAnalyzingAi,
   userEmail,
   userId,
+  resolveMapsUrl,
+  buildMapsRouteUrl,
   onRunAiAnalysis,
   onPrintMission,
   onRiskSaved,
@@ -548,14 +561,6 @@ function MissionRiskPanel({
   useEffect(() => {
     if (isLockedClosed) setEditing(false)
   }, [isLockedClosed])
-
-  const buildMapsSearchUrl = (query: string) => {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
-  }
-
-  const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
-  }
 
   const parseLines = (raw: string | null | undefined): string[] => {
     if (!raw) return []
@@ -764,7 +769,7 @@ function MissionRiskPanel({
                 rows={4}
                 value={safeHavens}
                 onChange={(e) => setSafeHavens(e.target.value)}
-                placeholder="Es. Ambasciata d'Italia Nairobi"
+                placeholder="Es. Comando Compagnia Carabinieri Roma EUR"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
@@ -777,7 +782,7 @@ function MissionRiskPanel({
                 rows={3}
                 value={medicalFacilities}
                 onChange={(e) => setMedicalFacilities(e.target.value)}
-                placeholder="Es. Aga Khan University Hospital Nairobi"
+                placeholder="Es. Ospedale Sant'Eugenio Piazzale dell'Umanesimo 10 Roma"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
@@ -836,7 +841,7 @@ function MissionRiskPanel({
                   <div key={idx} className="flex items-start justify-between gap-2">
                     <span className="text-neutral-100">{entry}</span>
                     <a
-                      href={buildMapsSearchUrl(entry)}
+                      href={resolveMapsUrl(entry)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="shrink-0 text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-800/70 transition"
@@ -861,7 +866,7 @@ function MissionRiskPanel({
                   <div key={idx} className="flex items-start justify-between gap-2">
                     <span className="text-neutral-100">{entry}</span>
                     <a
-                      href={buildMapsSearchUrl(entry)}
+                      href={resolveMapsUrl(entry)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="shrink-0 text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-sky-400 border border-sky-800/70 transition"
@@ -1339,6 +1344,7 @@ export default function MissionBoard({
   const [missions, setMissions] = useState<Mission[]>(initialMissions)
   const [operators, setOperators] = useState<OperatorOption[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [sites, setSites] = useState<SiteOption[]>([])
   const [riskList, setRiskList] = useState<RiskAssessment[]>([])
   const [briefList, setBriefList] = useState<ExecutiveBrief[]>([])
 
@@ -1389,12 +1395,39 @@ export default function MissionBoard({
   const [vehPlate, setVehPlate] = useState('')
   const [vehCategory, setVehCategory] = useState('Executive')
 
-  const buildMapsSearchUrl = (query: string) => {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
-  }
+  const formatSitePoint = (s: SiteOption) => `[${s.callsign}] ${s.name}, ${s.address}`
+
+  const stripCallsignPrefix = (raw: string) => raw.replace(/^\[[^\]]+\]\s*/, '').trim()
+
+  const resolveMapsUrl = useCallback(
+    (query: string) => {
+      const trimmed = query.trim()
+      const callsignMatch = trimmed.match(/^\[([^\]]+)\]/)
+      if (callsignMatch) {
+        const cs = callsignMatch[1].toUpperCase()
+        const matchedByCs = sites.find((s) => s.callsign.toUpperCase() === cs)
+        if (matchedByCs?.maps_url) return matchedByCs.maps_url
+      }
+      const lower = trimmed.toLowerCase()
+      const matchedByText = sites.find(
+        (s) =>
+          s.maps_url &&
+          (lower.includes(s.address.toLowerCase()) || lower.includes(s.name.toLowerCase()))
+      )
+      if (matchedByText?.maps_url) return matchedByText.maps_url
+
+      const clean = stripCallsignPrefix(trimmed)
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean)}`
+    },
+    [sites]
+  )
 
   const buildMapsRouteUrl = (origin: string, destination: string) => {
-    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin.trim())}&destination=${encodeURIComponent(destination.trim())}&travelmode=driving`
+    const cleanOrig = stripCallsignPrefix(origin)
+    const cleanDest = stripCallsignPrefix(destination)
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+      cleanOrig
+    )}&destination=${encodeURIComponent(cleanDest)}&travelmode=driving`
   }
 
   const escapeHtml = (str: string) =>
@@ -1775,21 +1808,21 @@ export default function MissionBoard({
   }
 
   const loadAssets = useCallback(async () => {
-    const opsRes = await supabase
-      .from('profiles')
-      .select('id, email, full_name, callsign, role, is_active')
-      .eq('is_active', true)
-      .order('callsign', { ascending: true })
-
-    const vehRes = await supabase
-      .from('vehicles')
-      .select('*')
-      .order('callsign', { ascending: true })
-
-    const riskRes = await supabase.from('mission_risk_assessments').select('*')
+    const [opsRes, vehRes, riskRes, sitesRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, email, full_name, callsign, role, is_active')
+        .eq('is_active', true)
+        .order('callsign', { ascending: true }),
+      supabase.from('vehicles').select('*').order('callsign', { ascending: true }),
+      supabase.from('mission_risk_assessments').select('*'),
+      supabase
+        .from('operational_sites')
+        .select('id, callsign, name, address, site_type, maps_url')
+        .order('callsign', { ascending: true }),
+    ])
 
     if (opsRes.data) {
-      // Esclude l'account Executive dalle assegnazioni operative (è il capo/cliente del team)
       const assignableOps = (opsRes.data as OperatorOption[]).filter(
         (op) => String(op.role || '').trim().toLowerCase() !== 'executive'
       )
@@ -1797,6 +1830,7 @@ export default function MissionBoard({
     }
     if (vehRes.data) setVehicles(vehRes.data)
     if (riskRes.data) setRiskList(riskRes.data)
+    if (sitesRes.data) setSites(sitesRes.data as SiteOption[])
 
     if (isAdmin) {
       const briefRes = await supabase.from('mission_executive_briefs').select('*')
@@ -3062,12 +3096,30 @@ export default function MissionBoard({
               <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Origine Generale / Partenza (Pick-up) *
               </label>
+              {sites.length > 0 && (
+                <select
+                  aria-label="Seleziona sede partenza"
+                  value=""
+                  onChange={(e) => {
+                    const selected = sites.find((s) => s.id === e.target.value)
+                    if (selected) setPickupPoint(formatSitePoint(selected))
+                  }}
+                  className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-emerald-300"
+                >
+                  <option value="">-- Inserisci da Registro Sedi (Partenza) --</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      [{s.callsign}] {s.name} ({s.address})
+                    </option>
+                  ))}
+                </select>
+              )}
               <input
                 type="text"
                 required
                 value={pickupPoint}
                 onChange={(e) => setPickupPoint(e.target.value)}
-                placeholder="Es. Roma EUR, Italia"
+                placeholder="Es. [HQ-EUR] Seven Holding S.p.A., Piazza Luigi Sturzo, 15, Roma"
                 className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
@@ -3076,12 +3128,30 @@ export default function MissionBoard({
               <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                 Destinazione Finale (Drop-off) *
               </label>
+              {sites.length > 0 && (
+                <select
+                  aria-label="Seleziona sede arrivo"
+                  value=""
+                  onChange={(e) => {
+                    const selected = sites.find((s) => s.id === e.target.value)
+                    if (selected) setDropoffPoint(formatSitePoint(selected))
+                  }}
+                  className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-emerald-300"
+                >
+                  <option value="">-- Inserisci da Registro Sedi (Arrivo) --</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      [{s.callsign}] {s.name} ({s.address})
+                    </option>
+                  ))}
+                </select>
+              )}
               <input
                 type="text"
                 required
                 value={dropoffPoint}
                 onChange={(e) => setDropoffPoint(e.target.value)}
-                placeholder="Es. Nairobi Westlands, Kenya"
+                placeholder="Es. Aeroporto Roma Fiumicino (FCO)"
                 className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
@@ -3152,6 +3222,26 @@ export default function MissionBoard({
                         <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Partenza Tappa *
                         </label>
+                        {sites.length > 0 && (
+                          <select
+                            aria-label="Seleziona sede partenza tappa"
+                            value=""
+                            onChange={(e) => {
+                              const selected = sites.find((s) => s.id === e.target.value)
+                              if (selected) {
+                                handleUpdateDraftLeg(leg.id, 'origin', formatSitePoint(selected))
+                              }
+                            }}
+                            className="w-full mb-1.5 bg-neutral-900 border border-neutral-700 rounded-lg p-1.5 text-base sm:text-xs text-sky-300"
+                          >
+                            <option value="">-- Sede registrata --</option>
+                            {sites.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                [{s.callsign}] {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <input
                           type="text"
                           required
@@ -3166,6 +3256,30 @@ export default function MissionBoard({
                         <label className="block text-xs uppercase text-neutral-400 mb-1">
                           Arrivo Tappa *
                         </label>
+                        {sites.length > 0 && (
+                          <select
+                            aria-label="Seleziona sede arrivo tappa"
+                            value=""
+                            onChange={(e) => {
+                              const selected = sites.find((s) => s.id === e.target.value)
+                              if (selected) {
+                                handleUpdateDraftLeg(
+                                  leg.id,
+                                  'destination',
+                                  formatSitePoint(selected)
+                                )
+                              }
+                            }}
+                            className="w-full mb-1.5 bg-neutral-900 border border-neutral-700 rounded-lg p-1.5 text-base sm:text-xs text-sky-300"
+                          >
+                            <option value="">-- Sede registrata --</option>
+                            {sites.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                [{s.callsign}] {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <input
                           type="text"
                           required
@@ -3420,7 +3534,7 @@ export default function MissionBoard({
 
                     <div className="flex flex-wrap items-center gap-2 text-neutral-100 text-sm sm:text-base font-medium">
                       <a
-                        href={buildMapsSearchUrl(mission.pickup_point)}
+                        href={resolveMapsUrl(mission.pickup_point)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
@@ -3429,7 +3543,7 @@ export default function MissionBoard({
                       </a>
                       <span className="text-emerald-400 font-bold">&rarr;</span>
                       <a
-                        href={buildMapsSearchUrl(mission.dropoff_point)}
+                        href={resolveMapsUrl(mission.dropoff_point)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline decoration-neutral-600 hover:decoration-emerald-400 hover:text-emerald-300 transition"
@@ -3499,7 +3613,9 @@ export default function MissionBoard({
                           {lastCheckIn.lat}, {lastCheckIn.lng} ({lastCheckIn.accuracy}m)
                         </span>
                         <a
-                          href={buildMapsSearchUrl(`${lastCheckIn.lat},${lastCheckIn.lng}`)}
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                            `${lastCheckIn.lat},${lastCheckIn.lng}`
+                          )}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="underline decoration-sky-600 hover:text-sky-200 font-semibold"
@@ -3521,7 +3637,9 @@ export default function MissionBoard({
                         </span>
                         {sosAlert.coords && (
                           <a
-                            href={buildMapsSearchUrl(sosAlert.coords)}
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                              sosAlert.coords
+                            )}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="underline decoration-red-500 hover:text-white font-semibold"
@@ -3812,6 +3930,7 @@ export default function MissionBoard({
                 {isRiskExpanded && (
                   <MissionRiskPanel
                     assignedVehicle={mission.assigned_vehicle}
+                    buildMapsRouteUrl={buildMapsRouteUrl}
                     clientVip={mission.client_vip}
                     dropoffPoint={mission.dropoff_point}
                     endTime={mission.end_time}
@@ -3826,6 +3945,7 @@ export default function MissionBoard({
                     onAuditUpdated={onAuditUpdated}
                     operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
                     pickupPoint={mission.pickup_point}
+                    resolveMapsUrl={resolveMapsUrl}
                     risk={risk}
                     routeLegs={mission.route_legs}
                     startTime={mission.start_time}
