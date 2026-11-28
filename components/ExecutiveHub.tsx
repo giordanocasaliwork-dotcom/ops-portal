@@ -23,6 +23,8 @@ export interface VipPreference {
   category: string
   title: string
   details: string
+  address?: string | null
+  maps_url?: string | null
 }
 
 export interface OperationalSite {
@@ -44,6 +46,7 @@ interface ExecutiveHubProps {
 export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHubProps) {
   const supabase = useMemo(() => createClient(), [])
   const siteFormRef = useRef<HTMLFormElement | null>(null)
+  const prefFormRef = useRef<HTMLFormElement | null>(null)
 
   const [activeTab, setActiveTab] = useState<'contacts' | 'preferences' | 'sites'>('contacts')
   const [contacts, setContacts] = useState<ExecutiveContact[]>([])
@@ -73,8 +76,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
   const [prefCategoryFilter, setPrefCategoryFilter] = useState('TUTTE')
   const [showPrefForm, setShowPrefForm] = useState(false)
+  const [editingPrefId, setEditingPrefId] = useState<string | null>(null)
   const [prefCategory, setPrefCategory] = useState('Protocollo & Sicurezza')
   const [prefTitle, setPrefTitle] = useState('')
+  const [prefAddress, setPrefAddress] = useState('')
+  const [prefMapsUrl, setPrefMapsUrl] = useState('')
   const [prefDetails, setPrefDetails] = useState('')
 
   const [showSiteForm, setShowSiteForm] = useState(false)
@@ -107,6 +113,38 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       return site.maps_url.trim()
     }
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(site.address)}`
+  }
+
+  const getPrefMapsHref = (pref: VipPreference) => {
+    if (pref.maps_url && pref.maps_url.trim().startsWith('http')) {
+      return pref.maps_url.trim()
+    }
+    if (pref.address && pref.address.trim().length > 0) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        pref.address.trim()
+      )}`
+    }
+    return null
+  }
+
+  const renderDetailsWithLinks = (text: string) => {
+    const parts = text.split(/(https?:\/\/[^\s]+)/g)
+    return parts.map((part, idx) => {
+      if (/^https?:\/\//.test(part)) {
+        return (
+          <a
+            key={idx}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-emerald-300 hover:text-emerald-200 underline decoration-emerald-700 break-all font-medium"
+          >
+            Apri Link Maps ↗
+          </a>
+        )
+      }
+      return <span key={idx}>{part}</span>
+    })
   }
 
   const handleAddContact = async (e: React.FormEvent) => {
@@ -207,33 +245,74 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     if (onAuditUpdated) onAuditUpdated()
   }
 
-  const handleAddPreference = async (e: React.FormEvent) => {
+  const resetPrefForm = () => {
+    setEditingPrefId(null)
+    setPrefCategory('Protocollo & Sicurezza')
+    setPrefTitle('')
+    setPrefAddress('')
+    setPrefMapsUrl('')
+    setPrefDetails('')
+    setShowPrefForm(false)
+  }
+
+  const handleEditPreference = (pref: VipPreference) => {
+    setError(null)
+    setEditingPrefId(pref.id)
+    setPrefCategory(pref.category || 'Protocollo & Sicurezza')
+    setPrefTitle(pref.title)
+    setPrefAddress(pref.address || '')
+    setPrefMapsUrl(pref.maps_url || '')
+    setPrefDetails(pref.details)
+    setShowPrefForm(true)
+    setTimeout(() => {
+      prefFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSavePreference = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('vip_preferences').insert([
-        {
-          category: prefCategory,
-          title: prefTitle.trim(),
-          details: prefDetails.trim(),
-        },
-      ])
+      const payload = {
+        category: prefCategory,
+        title: prefTitle.trim(),
+        address: prefAddress.trim() || null,
+        maps_url: prefMapsUrl.trim() || null,
+        details: prefDetails.trim(),
+      }
 
-      if (insErr) throw insErr
+      if (editingPrefId) {
+        const { error: updErr } = await supabase
+          .from('vip_preferences')
+          .update(payload)
+          .eq('id', editingPrefId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setPrefTitle('')
-      setPrefDetails('')
-      setShowPrefForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VIP_PREF_UPDATE: ${prefTitle.trim()} (${prefCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('vip_preferences').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetPrefForm()
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -253,6 +332,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       setError('Errore rimozione preferenza.')
       return
     }
+
+    if (editingPrefId === pref.id) resetPrefForm()
 
     await supabase.from('audit_logs').insert([
       {
@@ -1030,7 +1111,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => setShowPrefForm(!showPrefForm)}
+              onClick={() => {
+                if (showPrefForm) {
+                  resetPrefForm()
+                } else {
+                  setEditingPrefId(null)
+                  setShowPrefForm(true)
+                }
+              }}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition"
             >
               {showPrefForm ? 'Chiudi Modulo' : '+ Nuova Preferenza'}
@@ -1039,11 +1127,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showPrefForm && (
             <form
-              onSubmit={handleAddPreference}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={prefFormRef}
+              onSubmit={handleSavePreference}
+              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/50 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                Nuovo Standard / Preferenza Permanente Direzione
+                {editingPrefId
+                  ? 'Modifica Standard / Preferenza Direzione'
+                  : 'Nuovo Standard / Preferenza Permanente Direzione'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -1076,29 +1167,89 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Indirizzo / Luogo Collegato (Opzionale)
+                  </label>
+                  {sites.length > 0 && (
+                    <select
+                      aria-label="Importa sede registrata"
+                      value=""
+                      onChange={(e) => {
+                        const selected = sites.find((s) => s.id === e.target.value)
+                        if (selected) {
+                          setPrefAddress(`[${selected.callsign}] ${selected.name} — ${selected.address}`)
+                          if (selected.maps_url) {
+                            setPrefMapsUrl(selected.maps_url)
+                          }
+                        }
+                      }}
+                      className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-amber-300"
+                    >
+                      <option value="">-- Importa da Registro Sedi/Luoghi --</option>
+                      {sites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          [{s.callsign}] {s.name} ({s.address})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="text"
+                    value={prefAddress}
+                    onChange={(e) => setPrefAddress(e.target.value)}
+                    placeholder="Es. Piazza Luigi Sturzo, 15, Roma"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Link Diretto Google Maps (Opzionale — altrimenti generato dall&apos;indirizzo)
+                  </label>
+                  <input
+                    type="url"
+                    value={prefMapsUrl}
+                    onChange={(e) => setPrefMapsUrl(e.target.value)}
+                    placeholder="https://maps.google.com/..."
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                  Dettagli &amp; Standard Richiesti *
+                  Dettagli &amp; Standard Richiesti (eventuali URL nel testo diventano cliccabili) *
                 </label>
                 <textarea
                   rows={5}
                   required
                   value={prefDetails}
                   onChange={(e) => setPrefDetails(e.target.value)}
-                  placeholder="Specifiche esatte, presidi FFOO/DEA H24 e protocolli da applicare"
+                  placeholder="Specifiche esatte, presidi FFOO/DEA H24, codici accesso e link diretti"
                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={resetPrefForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Registra Preferenza'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingPrefId
+                    ? 'Aggiorna Preferenza'
+                    : 'Registra Preferenza'}
                 </button>
               </div>
             </form>
@@ -1106,30 +1257,63 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {filteredPreferences.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
-              {filteredPreferences.map((p) => (
-                <div
-                  key={p.id}
-                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex items-start justify-between gap-3"
-                >
-                  <div className="space-y-1.5">
-                    <span className="inline-block px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase">
-                      {p.category}
-                    </span>
-                    <div className="text-base font-bold text-white">{p.title}</div>
-                    <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
-                      {p.details}
+              {filteredPreferences.map((p) => {
+                const mapsHref = getPrefMapsHref(p)
+
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between gap-3"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-block px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 text-xs font-bold uppercase">
+                          {p.category}
+                        </span>
+                        {mapsHref && (
+                          <a
+                            href={mapsHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs uppercase font-bold px-2.5 py-0.5 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
+                          >
+                            Maps ↗
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="text-base font-bold text-white">{p.title}</div>
+
+                      {p.address && (
+                        <div className="text-xs sm:text-sm text-amber-200 font-medium">
+                          Luogo: {p.address}
+                        </div>
+                      )}
+
+                      <div className="text-neutral-200 whitespace-pre-line leading-relaxed">
+                        {renderDetailsWithLinks(p.details)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 border-t border-neutral-800/80 pt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEditPreference(p)}
+                        className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase"
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePreference(p)}
+                        className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-red-950/70 border border-neutral-800 hover:border-red-800 text-neutral-400 hover:text-red-300 text-xs font-semibold uppercase"
+                      >
+                        Rimuovi
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePreference(p)}
-                    className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase shrink-0 py-1"
-                  >
-                    Rimuovi
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
