@@ -18,6 +18,14 @@ export interface ExecutiveAppointment {
   status: 'CONFERMATO' | 'DA CONFERMARE' | 'RINVIATO' | 'COMPLETATO'
 }
 
+interface SiteOption {
+  id: string
+  callsign: string
+  name: string
+  address: string
+  site_type: string
+}
+
 interface ExecutiveAppointmentsProps {
   userEmail: string
   userId: string
@@ -32,6 +40,7 @@ export default function ExecutiveAppointments({
   const supabase = useMemo(() => createClient(), [])
 
   const [appointments, setAppointments] = useState<ExecutiveAppointment[]>([])
+  const [sites, setSites] = useState<SiteOption[]>([])
   const [filter, setFilter] = useState<'PROSSIMI' | 'OGGI' | 'TUTTI' | 'COMPLETATI'>('PROSSIMI')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -53,17 +62,26 @@ export default function ExecutiveAppointments({
   )
 
   const loadAppointments = useCallback(async () => {
-    const { data, error: fetchErr } = await supabase
-      .from('executive_appointments')
-      .select('*')
-      .order('start_time', { ascending: true })
+    const [apptsRes, sitesRes] = await Promise.all([
+      supabase
+        .from('executive_appointments')
+        .select('*')
+        .order('start_time', { ascending: true }),
+      supabase
+        .from('operational_sites')
+        .select('id, callsign, name, address, site_type')
+        .order('callsign', { ascending: true }),
+    ])
 
-    if (fetchErr) {
+    if (apptsRes.error) {
       setError('Errore caricamento agenda appuntamenti Direzione.')
       return
     }
-    if (data) {
-      setAppointments(data as ExecutiveAppointment[])
+    if (apptsRes.data) {
+      setAppointments(apptsRes.data as ExecutiveAppointment[])
+    }
+    if (sitesRes.data) {
+      setSites(sitesRes.data as SiteOption[])
     }
   }, [supabase])
 
@@ -506,6 +524,8 @@ export default function ExecutiveAppointments({
                 className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               >
                 <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
+                <option value="Ufficio Secondario / Filiale">Ufficio Secondario / Filiale</option>
+                <option value="Residenza Privata">Residenza Privata</option>
                 <option value="Sede Esterna / Trasferta">Sede Esterna / Trasferta</option>
                 <option value="Pranzo / Cena di Lavoro">Pranzo / Cena di Lavoro</option>
                 <option value="Video / Call Riservata">Video / Call Riservata</option>
@@ -514,13 +534,34 @@ export default function ExecutiveAppointments({
 
             <div>
               <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                Indirizzo Esatto / Sala / Piattaforma
+                Sede / Callsign Registrato oppure Indirizzo
               </label>
+              {sites.length > 0 && (
+                <select
+                  aria-label="Seleziona sede registrata"
+                  value=""
+                  onChange={(e) => {
+                    const selected = sites.find((s) => s.id === e.target.value)
+                    if (selected) {
+                      setLocationType(selected.site_type || 'Ufficio / Sede Centrale')
+                      setLocationDetails(`[${selected.callsign}] ${selected.name} — ${selected.address}`)
+                    }
+                  }}
+                  className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-emerald-300"
+                >
+                  <option value="">-- Selezione rapida da Sedi &amp; Callsign --</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      [{s.callsign}] {s.name} ({s.address})
+                    </option>
+                  ))}
+                </select>
+              )}
               <input
                 type="text"
                 value={locationDetails}
                 onChange={(e) => setLocationDetails(e.target.value)}
-                placeholder="Es. Sala Riunioni / Via Veneto 12 / Link Zoom"
+                placeholder="Es. [HQ-EUR] Seven Holding S.p.A. — Piazza Luigi Sturzo, 15, Roma"
                 className="w-full bg-neutral-900 border border-neutral-700 focus:border-emerald-400 focus:outline-none rounded-lg p-2.5 text-base sm:text-sm text-white"
               />
             </div>
@@ -651,7 +692,7 @@ export default function ExecutiveAppointments({
                         {isPhysicalLocation && (
                           <a
                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                              appt.location_details
+                              appt.location_details.replace(/^\[[^\]]+\]\s*/, '')
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
