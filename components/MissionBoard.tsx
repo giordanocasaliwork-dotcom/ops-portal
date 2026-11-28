@@ -15,6 +15,17 @@ export interface RouteLeg {
   notes?: string
 }
 
+export interface MissionDebriefing {
+  outcome: 'REGOLARE' | 'CRITICITA LIEVI' | 'ANOMALIA SICUREZZA'
+  actual_end_time: string
+  vehicle_condition: string
+  operational_summary: string
+  incidents_notes?: string
+  operator_email: string
+  operator_label: string
+  submitted_at: string
+}
+
 export interface Mission {
   id: string
   created_at: string
@@ -29,6 +40,10 @@ export interface Mission {
   status: 'pianificata' | 'in corso' | 'chiusa'
   notes?: string | null
   route_legs?: RouteLeg[] | null
+  closed_at?: string | null
+  closed_by?: string | null
+  debriefing?: MissionDebriefing | null
+  debriefing_completed_at?: string | null
 }
 
 export type ThreatLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL'
@@ -93,6 +108,328 @@ function formatLegsSummaryLines(legs?: RouteLeg[] | null): string[] {
   })
 }
 
+interface MissionDebriefingPanelProps {
+  mission: Mission
+  canCompile: boolean
+  operatorLabel: string
+  userEmail: string
+  onDebriefingSaved: (updatedMission: Mission) => void
+  onAuditUpdated?: () => void
+}
+
+function MissionDebriefingPanel({
+  mission,
+  canCompile,
+  operatorLabel,
+  userEmail,
+  onDebriefingSaved,
+  onAuditUpdated,
+}: MissionDebriefingPanelProps) {
+  const supabase = useMemo(() => createClient(), [])
+
+  const toLocalNow = (iso?: string | null) => {
+    const d = iso ? new Date(iso) : new Date()
+    const valid = Number.isNaN(d.getTime()) ? new Date() : d
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${valid.getFullYear()}-${pad(valid.getMonth() + 1)}-${pad(valid.getDate())}T${pad(
+      valid.getHours()
+    )}:${pad(valid.getMinutes())}`
+  }
+
+  const [outcome, setOutcome] = useState<'REGOLARE' | 'CRITICITA LIEVI' | 'ANOMALIA SICUREZZA'>(
+    'REGOLARE'
+  )
+  const [actualEndTime, setActualEndTime] = useState(() => toLocalNow(mission.closed_at))
+  const [vehicleCondition, setVehicleCondition] = useState('')
+  const [operationalSummary, setOperationalSummary] = useState('')
+  const [incidentsNotes, setIncidentsNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [copiedDebrief, setCopiedDebrief] = useState(false)
+  const [panelError, setPanelError] = useState<string | null>(null)
+
+  const existing = mission.debriefing
+
+  const formatDateTime = (iso: string) =>
+    new Date(iso).toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+  const handleSubmitDebriefing = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canCompile) return
+    setSaving(true)
+    setPanelError(null)
+
+    try {
+      const nowIso = new Date().toISOString()
+      const debriefPayload: MissionDebriefing = {
+        outcome,
+        actual_end_time: actualEndTime ? new Date(actualEndTime).toISOString() : nowIso,
+        vehicle_condition: vehicleCondition.trim(),
+        operational_summary: operationalSummary.trim(),
+        incidents_notes: incidentsNotes.trim() || undefined,
+        operator_email: userEmail,
+        operator_label: operatorLabel,
+        submitted_at: nowIso,
+      }
+
+      const { data, error } = await supabase
+        .from('missions')
+        .update({
+          debriefing: debriefPayload,
+          debriefing_completed_at: nowIso,
+        })
+        .eq('id', mission.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `MISSION_DEBRIEFING_ARCHIVED (${mission.client_vip}) -> ${outcome}`,
+          status: 'SUCCESS',
+        },
+      ])
+
+      if (data) {
+        onDebriefingSaved(data as Mission)
+      }
+      if (onAuditUpdated) onAuditUpdated()
+    } catch (err: unknown) {
+      setPanelError(getErrorMessage(err, 'Errore durante il salvataggio del Débriefing Operativo.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCopyDebrief = async () => {
+    if (!existing) return
+    const lines = [
+      `DEBRIEFING OPERATIVO ARCHIVIATO - ${mission.client_vip.toUpperCase()}`,
+      `Esito Missione: ${existing.outcome}`,
+      `Conclusione Effettiva: ${formatDateTime(existing.actual_end_time)}`,
+      `Operatore Esecutore: ${existing.operator_label} (${existing.operator_email})`,
+      `Stato Mezzo & Dotazioni: ${existing.vehicle_condition || 'Regolare'}`,
+      `Resoconto Operativo:\n${existing.operational_summary}`,
+      existing.incidents_notes ? `Criticita / Note Future:\n${existing.incidents_notes}` : null,
+      `Archiviato il: ${formatDateTime(existing.submitted_at)}`,
+    ].filter(Boolean)
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      setCopiedDebrief(true)
+      setTimeout(() => setCopiedDebrief(false), 2000)
+    } catch {
+      setPanelError('Impossibile copiare il débriefing negli appunti.')
+    }
+  }
+
+  return (
+    <div className="border-t border-emerald-700/60 pt-4 bg-neutral-900/90 rounded-xl p-4 sm:p-5 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={
+              'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
+              (existing
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/50')
+            }
+          >
+            {existing ? 'Archiviata nel Registro' : 'Débriefing Obbligatorio'}
+          </span>
+          <span className="text-xs sm:text-sm uppercase tracking-wider font-bold text-white">
+            Débriefing Operativo Post-Missione
+          </span>
+        </div>
+
+        {existing && (
+          <button
+            type="button"
+            onClick={handleCopyDebrief}
+            className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
+          >
+            {copiedDebrief ? 'Débriefing Copiato' : 'Copia Débriefing'}
+          </button>
+        )}
+      </div>
+
+      {panelError && (
+        <div className="p-3 bg-red-950/60 border border-red-800 text-red-200 text-sm rounded-lg">
+          {panelError}
+        </div>
+      )}
+
+      {existing ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
+              Esito Generale &amp; Orario Conclusione
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={
+                  'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
+                  (existing.outcome === 'ANOMALIA SICUREZZA'
+                    ? 'bg-red-950 text-red-300 border-red-700'
+                    : existing.outcome === 'CRITICITA LIEVI'
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-700'
+                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-700')
+                }
+              >
+                {existing.outcome}
+              </span>
+              <span className="font-mono text-neutral-200 text-xs sm:text-sm">
+                {formatDateTime(existing.actual_end_time)}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
+              Operatore Esecutore &amp; Archiviazione
+            </div>
+            <div className="text-white font-semibold">{existing.operator_label}</div>
+            <div className="text-xs font-mono text-neutral-400 mt-0.5">
+              Registrato il {formatDateTime(existing.submitted_at)}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
+              Stato Mezzo, Chilometraggio &amp; Dotazioni
+            </div>
+            <div className="text-neutral-100 whitespace-pre-line">
+              {existing.vehicle_condition || 'Nessuna annotazione sul mezzo.'}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
+              Relazione Svolgimento Missione
+            </div>
+            <div className="text-neutral-100 whitespace-pre-line leading-relaxed">
+              {existing.operational_summary}
+            </div>
+          </div>
+
+          {existing.incidents_notes && (
+            <div className="md:col-span-2 bg-amber-950/25 border border-amber-800/70 rounded-xl p-3.5">
+              <div className="text-xs uppercase text-amber-300 font-bold mb-1">
+                Criticità Rilevate / Note per Pianificazioni Future
+              </div>
+              <div className="text-amber-100 whitespace-pre-line leading-relaxed">
+                {existing.incidents_notes}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : canCompile ? (
+        <form onSubmit={handleSubmitDebriefing} className="space-y-3.5 text-sm">
+          <div className="p-3 bg-amber-950/40 border border-amber-700/70 rounded-lg text-amber-200 text-xs sm:text-sm">
+            La missione è chiusa e bloccata. Compila il rapporto finale qui sotto per archiviare definitivamente la missione nel <strong>Registro Missioni</strong>.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div>
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Esito Generale Servizio *
+              </label>
+              <select
+                value={outcome}
+                onChange={(e) =>
+                  setOutcome(
+                    e.target.value as 'REGOLARE' | 'CRITICITA LIEVI' | 'ANOMALIA SICUREZZA'
+                  )
+                }
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+              >
+                <option value="REGOLARE">REGOLARE — Nessuna anomalia</option>
+                <option value="CRITICITA LIEVI">CRITICITÀ LIEVI — Ritardi / Viabilità</option>
+                <option value="ANOMALIA SICUREZZA">ANOMALIA SICUREZZA — Evento rilevante</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Ora Effettiva Rientro / Conclusione *
+              </label>
+              <input
+                type="datetime-local"
+                required
+                value={actualEndTime}
+                onChange={(e) => setActualEndTime(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Stato Mezzo, Rifornimento &amp; Dotazioni Bordo *
+              </label>
+              <input
+                type="text"
+                required
+                value={vehicleCondition}
+                onChange={(e) => setVehicleCondition(e.target.value)}
+                placeholder="Es. Mezzo integro, serbatoio 3/4, kit medico e dotazioni verificati"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Relazione Operativa Svolgimento Missione *
+              </label>
+              <textarea
+                rows={4}
+                required
+                value={operationalSummary}
+                onChange={(e) => setOperationalSummary(e.target.value)}
+                placeholder="Descrivi l'andamento del movimento, puntualità pick-up/drop-off, condizioni itinerario, accoglienza e rispetto protocolli."
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                Criticità Rilevate / Suggerimenti per Missioni Future (Opzionale)
+              </label>
+              <textarea
+                rows={2}
+                value={incidentsNotes}
+                onChange={(e) => setIncidentsNotes(e.target.value)}
+                placeholder="Segnala eventuali choke points, cantieri, accessi difficoltosi o accorgimenti per il prossimo servizio."
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={saving}
+              className="min-h-[42px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-5 py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {saving ? 'Archiviazione in corso...' : 'Conferma Débriefing & Archivia'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="p-3.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-neutral-300">
+          In attesa che l&apos;operatore esecutore (<strong>{operatorLabel}</strong>) compili il Débriefing Operativo per completare l&apos;archiviazione nel Registro.
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface MissionRiskPanelProps {
   missionId: string
   clientVip: string
@@ -106,6 +443,7 @@ interface MissionRiskPanelProps {
   routeLegs?: RouteLeg[] | null
   risk?: RiskAssessment
   isAdmin: boolean
+  isLockedClosed: boolean
   isAnalyzingAi: boolean
   userEmail: string
   userId: string
@@ -128,6 +466,7 @@ function MissionRiskPanel({
   routeLegs,
   risk,
   isAdmin,
+  isLockedClosed,
   isAnalyzingAi,
   userEmail,
   userId,
@@ -138,7 +477,7 @@ function MissionRiskPanel({
 }: MissionRiskPanelProps) {
   const supabase = useMemo(() => createClient(), [])
 
-  const [editing, setEditing] = useState(!risk && isAdmin)
+  const [editing, setEditing] = useState(!risk && isAdmin && !isLockedClosed)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
@@ -161,6 +500,10 @@ function MissionRiskPanel({
       setEditing(false)
     }
   }, [risk])
+
+  useEffect(() => {
+    if (isLockedClosed) setEditing(false)
+  }, [isLockedClosed])
 
   const buildMapsSearchUrl = (query: string) => {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`
@@ -190,6 +533,7 @@ function MissionRiskPanel({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLockedClosed) return
     setSaving(true)
     setPanelError(null)
 
@@ -271,7 +615,7 @@ function MissionRiskPanel({
           Intelligence • Risk Assessment, Country Profile, Safe Havens &amp; Piano B
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {isAdmin && !isLockedClosed && (
             <button
               type="button"
               disabled={isAnalyzingAi}
@@ -299,7 +643,7 @@ function MissionRiskPanel({
           >
             {copied ? 'Briefing Copiato' : 'Copia Briefing'}
           </button>
-          {isAdmin && !editing && (
+          {isAdmin && !isLockedClosed && !editing && (
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -323,7 +667,7 @@ function MissionRiskPanel({
         </div>
       )}
 
-      {isAdmin && editing ? (
+      {isAdmin && !isLockedClosed && editing ? (
         <form onSubmit={handleSave} className="space-y-3.5 text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
@@ -515,7 +859,7 @@ function MissionRiskPanel({
         </div>
       ) : (
         <div className="text-sm text-neutral-400 py-2">
-          Scheda Risk Assessment non ancora compilata. Clicca su &quot;Genera Analisi AI&quot; per elaborare il percorso e tutte le tappe.
+          Scheda Risk Assessment non compilata per questa missione.
         </div>
       )}
     </div>
@@ -527,6 +871,7 @@ interface ExecutiveBriefPanelProps {
   operatorLabel: string
   risk?: RiskAssessment
   brief?: ExecutiveBrief
+  isLockedClosed: boolean
   userEmail: string
   userId: string
   onBriefSaved: (missionId: string, updated: ExecutiveBrief) => void
@@ -538,6 +883,7 @@ function ExecutiveBriefPanel({
   operatorLabel,
   risk,
   brief,
+  isLockedClosed,
   userEmail,
   userId,
   onBriefSaved,
@@ -545,7 +891,7 @@ function ExecutiveBriefPanel({
 }: ExecutiveBriefPanelProps) {
   const supabase = useMemo(() => createClient(), [])
 
-  const [editing, setEditing] = useState(!brief)
+  const [editing, setEditing] = useState(!brief && !isLockedClosed)
   const [saving, setSaving] = useState(false)
   const [copiedExec, setCopiedExec] = useState(false)
   const [briefError, setBriefError] = useState<string | null>(null)
@@ -571,6 +917,10 @@ function ExecutiveBriefPanel({
     }
   }, [brief])
 
+  useEffect(() => {
+    if (isLockedClosed) setEditing(false)
+  }, [isLockedClosed])
+
   const formatDate = (iso: string) => {
     return new Date(iso).toLocaleString('it-IT', {
       day: '2-digit',
@@ -583,6 +933,7 @@ function ExecutiveBriefPanel({
 
   const handleSaveBrief = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLockedClosed) return
     setSaving(true)
     setBriefError(null)
 
@@ -680,7 +1031,7 @@ function ExecutiveBriefPanel({
           >
             {copiedExec ? 'Dossier Copiato' : 'Copia per Direzione'}
           </button>
-          {!editing && (
+          {!isLockedClosed && !editing && (
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -698,7 +1049,7 @@ function ExecutiveBriefPanel({
         </div>
       )}
 
-      {editing ? (
+      {!isLockedClosed && editing ? (
         <form onSubmit={handleSaveBrief} className="space-y-3.5 text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
@@ -873,7 +1224,7 @@ function ExecutiveBriefPanel({
         </div>
       ) : (
         <div className="text-sm text-neutral-400 py-2">
-          Dossier Direzionale non ancora compilato per questa missione.
+          Dossier Direzionale non compilato per questa missione.
         </div>
       )}
     </div>
@@ -946,10 +1297,14 @@ export default function MissionBoard({
   const [riskList, setRiskList] = useState<RiskAssessment[]>([])
   const [briefList, setBriefList] = useState<ExecutiveBrief[]>([])
 
-  const [filter, setFilter] = useState<'tutte' | 'pianificata' | 'in corso' | 'chiusa'>('tutte')
+  const [filter, setFilter] = useState<'attive' | 'pianificata' | 'in corso' | 'registro' | 'tutte'>(
+    'attive'
+  )
   const [onlyMine, setOnlyMine] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingMissionId, setEditingMissionId] = useState<string | null>(null)
+  const [closeConfirmMissionId, setCloseConfirmMissionId] = useState<string | null>(null)
+  const [closingMissionId, setClosingMissionId] = useState<string | null>(null)
   const [showFleet, setShowFleet] = useState(false)
   const [showMorningBrief, setShowMorningBrief] = useState(false)
   const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
@@ -970,6 +1325,7 @@ export default function MissionBoard({
 
   const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null)
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
+  const [expandedDebriefId, setExpandedDebriefId] = useState<string | null>(null)
 
   const [clientVip, setClientVip] = useState('')
   const [startTime, setStartTime] = useState('')
@@ -1059,6 +1415,7 @@ export default function MissionBoard({
   }
 
   const handleEditMission = (mission: Mission) => {
+    if (mission.status === 'chiusa') return
     setError(null)
     setEditingMissionId(mission.id)
     setClientVip(mission.client_vip || '')
@@ -1193,16 +1550,28 @@ export default function MissionBoard({
     const risk = riskList.find((r) => r.mission_id === mission.id)
     const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
     const legLines = formatLegsSummaryLines(mission.route_legs)
+    const debrief = mission.debriefing
 
     const lines = [
       `SCHEDA MISSIONE & ANALISI TATTICA - ${mission.client_vip.toUpperCase()}`,
-      `Stato: ${mission.status.toUpperCase()} | Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
+      `Stato: ${mission.status.toUpperCase()}${
+        mission.debriefing_completed_at ? ' (ARCHIVIATA IN REGISTRO)' : ''
+      } | Livello Rischio: ${risk?.threat_level || 'NON VALUTATO'}`,
       `Finestra: ${formatDateTime(mission.start_time)} -> ${formatDateTime(mission.end_time)}`,
       `Tratta Generale: ${mission.pickup_point} -> ${mission.dropoff_point}`,
       legLines.length > 0 ? `\nPIANO DI VIAGGIO MULTIMODALE:\n${legLines.join('\n')}` : null,
       `Rotta Maps: ${buildMapsRouteUrl(mission.pickup_point, mission.dropoff_point)}`,
       `Assetto: ${mission.assigned_vehicle} | Operatore: ${formatOperatorLabel(mission.assigned_operator_id)}`,
       mission.notes ? `Note Logistica: ${mission.notes}` : null,
+      debrief
+        ? `\nDEBRIEFING OPERATIVO ARCHIVIATO:\nEsito: ${debrief.outcome} | Conclusione: ${formatDateTime(
+            debrief.actual_end_time
+          )}\nOperatore Esecutore: ${debrief.operator_label}\nStato Mezzo: ${
+            debrief.vehicle_condition
+          }\nRelazione:\n${debrief.operational_summary}${
+            debrief.incidents_notes ? `\nCriticita / Note Future:\n${debrief.incidents_notes}` : ''
+          }`
+        : null,
       brief?.counterpart_name
         ? `\nDOSSIER DIREZIONALE:\nInterlocutore: ${brief.counterpart_name}${brief.counterpart_role ? ' (' + brief.counterpart_role + ')' : ''}`
         : null,
@@ -1241,6 +1610,21 @@ export default function MissionBoard({
     const risk = riskList.find((r) => r.mission_id === mission.id)
     const brief = isAdmin ? briefList.find((b) => b.mission_id === mission.id) : undefined
     const legLines = formatLegsSummaryLines(mission.route_legs)
+    const debrief = mission.debriefing
+
+    const debriefHtml = debrief
+      ? `
+        <div class="section">
+          <div class="section-title">Débriefing Operativo &amp; Archiviazione Registro</div>
+          <div class="box-planb">
+            <div><strong>Esito Missione:</strong> ${escapeHtml(debrief.outcome)} &mdash; <strong>Conclusione Effettiva:</strong> ${escapeHtml(formatDateTime(debrief.actual_end_time))}</div>
+            <div><strong>Operatore Esecutore:</strong> ${escapeHtml(debrief.operator_label)} (${escapeHtml(debrief.operator_email)})</div>
+            <div><strong>Stato Mezzo &amp; Dotazioni:</strong> ${escapeHtml(debrief.vehicle_condition)}</div>
+            <div style="margin-top:6px;"><strong>Relazione Operativa:</strong><br/>${escapeHtml(debrief.operational_summary)}</div>
+            ${debrief.incidents_notes ? `<div style="margin-top:6px;"><strong>Criticita / Note Future:</strong><br/>${escapeHtml(debrief.incidents_notes)}</div>` : ''}
+          </div>
+        </div>`
+      : ''
 
     const legsHtml =
       legLines.length > 0
@@ -1294,7 +1678,7 @@ export default function MissionBoard({
             <h1>${escapeHtml(mission.client_vip)}</h1>
           </div>
           <div style="text-align:right;">
-            <div class="tag">STATO: ${escapeHtml(mission.status.toUpperCase())}</div>
+            <div class="tag">STATO: ${escapeHtml(mission.status.toUpperCase())}${mission.debriefing_completed_at ? ' (ARCHIVIATA)' : ''}</div>
             <div class="tag">RISCHIO: ${escapeHtml(risk?.threat_level || 'NON VALUTATO')}</div>
           </div>
         </div>
@@ -1306,6 +1690,7 @@ export default function MissionBoard({
           ${mission.notes ? `<div style="grid-column: span 2;"><strong>Note Logistica:</strong> ${escapeHtml(mission.notes)}</div>` : ''}
         </div>
 
+        ${debriefHtml}
         ${legsHtml}
         ${execHtml}
 
@@ -1399,10 +1784,19 @@ export default function MissionBoard({
     })
   }
 
+  const handleDebriefingSaved = (updatedMission: Mission) => {
+    setMissions((prev) =>
+      prev.map((m) => (m.id === updatedMission.id ? updatedMission : m))
+    )
+    router.refresh()
+  }
+
   const runAiRouteRiskAnalysis = async (mission: Mission) => {
+    if (mission.status === 'chiusa') return
     setAnalyzingMissionId(mission.id)
     setExpandedRiskId(mission.id)
     setExpandedBriefId(null)
+    setExpandedDebriefId(null)
     setError(null)
 
     try {
@@ -1668,6 +2062,7 @@ export default function MissionBoard({
   }
 
   const handleSosClick = (mission: Mission) => {
+    if (mission.status === 'chiusa') return
     if (sosConfirmId !== mission.id) {
       setSosConfirmId(mission.id)
       return
@@ -1737,6 +2132,7 @@ export default function MissionBoard({
   }
 
   const handleGpsCheckIn = (mission: Mission) => {
+    if (mission.status === 'chiusa') return
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       setError('Geolocalizzazione GPS non supportata da questo dispositivo.')
       return
@@ -1991,21 +2387,21 @@ export default function MissionBoard({
   }
 
   const handleReassignOperator = async (
-    missionId: string,
-    clientName: string,
+    mission: Mission,
     newOpId: string
   ) => {
+    if (mission.status === 'chiusa') return
     const cleanOpId = newOpId || null
     const previous = [...missions]
 
     setMissions((prev) =>
-      prev.map((m) => (m.id === missionId ? { ...m, assigned_operator_id: cleanOpId } : m))
+      prev.map((m) => (m.id === mission.id ? { ...m, assigned_operator_id: cleanOpId } : m))
     )
 
     const { error: updateErr } = await supabase
       .from('missions')
       .update({ assigned_operator_id: cleanOpId })
-      .eq('id', missionId)
+      .eq('id', mission.id)
 
     if (updateErr) {
       setMissions(previous)
@@ -2016,7 +2412,7 @@ export default function MissionBoard({
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: `MISSION_ASSIGN_OP (${clientName}) -> ${formatOperatorLabel(cleanOpId)}`,
+        action: `MISSION_ASSIGN_OP (${mission.client_vip}) -> ${formatOperatorLabel(cleanOpId)}`,
         status: 'SUCCESS',
       },
     ])
@@ -2024,30 +2420,47 @@ export default function MissionBoard({
   }
 
   const handleStatusChange = async (
-    missionId: string,
-    clientName: string,
+    mission: Mission,
     newStatus: 'pianificata' | 'in corso' | 'chiusa'
   ) => {
+    if (mission.status === 'chiusa') {
+      setError('Una missione chiusa è archiviata nel Registro e non può essere riaperta.')
+      return
+    }
+
+    if (newStatus === 'chiusa') {
+      if (mission.assigned_operator_id && mission.assigned_operator_id !== userId) {
+        setError(
+          `Solo l'operatore assegnato (${formatOperatorLabel(
+            mission.assigned_operator_id
+          )}) può chiudere questa missione e compilare il Débriefing.`
+        )
+        return
+      }
+      setCloseConfirmMissionId(mission.id)
+      return
+    }
+
     const previous = [...missions]
     setMissions((prev) =>
-      prev.map((m) => (m.id === missionId ? { ...m, status: newStatus } : m))
+      prev.map((m) => (m.id === mission.id ? { ...m, status: newStatus } : m))
     )
 
     const { error: updateError } = await supabase
       .from('missions')
       .update({ status: newStatus })
-      .eq('id', missionId)
+      .eq('id', mission.id)
 
     if (updateError) {
       setMissions(previous)
-      setError('Impossibile aggiornare lo stato operativo.')
+      setError(getErrorMessage(updateError, 'Impossibile aggiornare lo stato operativo.'))
       return
     }
 
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: 'MISSION_STATUS -> ' + newStatus.toUpperCase() + ' (' + clientName + ')',
+        action: 'MISSION_STATUS -> ' + newStatus.toUpperCase() + ' (' + mission.client_vip + ')',
         status: 'SUCCESS',
       },
     ])
@@ -2056,29 +2469,101 @@ export default function MissionBoard({
     router.refresh()
   }
 
-  const handleDeleteMission = async (missionId: string, clientName: string) => {
+  const handleConfirmCloseMission = async (mission: Mission) => {
+    if (mission.status === 'chiusa') return
+    if (mission.assigned_operator_id && mission.assigned_operator_id !== userId) {
+      setError('Solo l operatore che ha eseguito la missione può chiuderla.')
+      setCloseConfirmMissionId(null)
+      return
+    }
+
+    setClosingMissionId(mission.id)
+    setError(null)
+
+    try {
+      const nowIso = new Date().toISOString()
+      const executorId = mission.assigned_operator_id || userId
+
+      const { data, error: closeErr } = await supabase
+        .from('missions')
+        .update({
+          status: 'chiusa',
+          assigned_operator_id: executorId,
+          closed_at: nowIso,
+          closed_by: userId,
+        })
+        .eq('id', mission.id)
+        .select()
+        .single()
+
+      if (closeErr) throw closeErr
+
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `MISSION_CLOSED_LOCKED (${mission.client_vip}) — In attesa Débriefing Operatore`,
+          status: 'SUCCESS',
+        },
+      ])
+
+      const updatedMission = (data as Mission) || {
+        ...mission,
+        status: 'chiusa' as const,
+        assigned_operator_id: executorId,
+        closed_at: nowIso,
+        closed_by: userId,
+      }
+
+      setMissions((prev) =>
+        prev.map((m) => (m.id === mission.id ? updatedMission : m))
+      )
+      setCloseConfirmMissionId(null)
+      if (editingMissionId === mission.id) resetMissionForm()
+      setExpandedRiskId(null)
+      setExpandedBriefId(null)
+      setExpandedDebriefId(mission.id)
+
+      if (filter === 'attive' || filter === 'pianificata' || filter === 'in corso') {
+        setFilter('registro')
+      }
+
+      if (onAuditUpdated) onAuditUpdated()
+      router.refresh()
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Errore durante la chiusura definitiva della missione.'))
+    } finally {
+      setClosingMissionId(null)
+    }
+  }
+
+  const handleDeleteMission = async (mission: Mission) => {
+    if (mission.status === 'chiusa') {
+      setError('Le missioni chiuse sono archiviate nel Registro e non possono essere eliminate.')
+      return
+    }
+
     const previous = [...missions]
-    setMissions((prev) => prev.filter((m) => m.id !== missionId))
+    setMissions((prev) => prev.filter((m) => m.id !== mission.id))
 
     const { error: deleteError } = await supabase
       .from('missions')
       .delete()
-      .eq('id', missionId)
+      .eq('id', mission.id)
 
     if (deleteError) {
       setMissions(previous)
-      setError('Errore nella rimozione della missione.')
+      setError(getErrorMessage(deleteError, 'Errore nella rimozione della missione.'))
       return
     }
 
-    if (editingMissionId === missionId) {
+    if (editingMissionId === mission.id) {
       resetMissionForm()
     }
 
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: 'MISSION_DELETE (' + clientName + ')',
+        action: 'MISSION_DELETE (' + mission.client_vip + ')',
         status: 'SUCCESS',
       },
     ])
@@ -2091,15 +2576,26 @@ export default function MissionBoard({
     (m) => m.assigned_operator_id === userId && m.status !== 'chiusa'
   ).length
 
+  const closedRegistryCount = missions.filter((m) => m.status === 'chiusa').length
+  const pendingMyDebriefCount = missions.filter(
+    (m) =>
+      m.status === 'chiusa' &&
+      !m.debriefing_completed_at &&
+      m.assigned_operator_id === userId
+  ).length
+
   const filteredMissions = missions.filter((m) => {
     if (onlyMine && m.assigned_operator_id !== userId) return false
-    return filter === 'tutte' ? true : m.status === filter
+    if (filter === 'attive') return m.status !== 'chiusa'
+    if (filter === 'registro') return m.status === 'chiusa'
+    if (filter === 'tutte') return true
+    return m.status === filter
   })
 
   const statusBadge = (status: Mission['status']) => {
     if (status === 'pianificata') return 'bg-amber-950/60 text-amber-300 border-amber-700'
     if (status === 'in corso') return 'bg-emerald-950/70 text-emerald-300 border-emerald-600'
-    return 'bg-neutral-800 text-neutral-300 border-neutral-700'
+    return 'bg-neutral-800 text-neutral-300 border-neutral-600'
   }
 
   const threatBadge = (level?: ThreatLevel) => {
@@ -2115,10 +2611,10 @@ export default function MissionBoard({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
         <div>
           <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
-            Agenda Direzionale, Flotta &amp; Risk Assessment
+            Agenda Direzionale, Flotta &amp; Registro Missioni
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-            Movimenti multimodali, analisi AI internazionale, Safe Havens e Piano B
+            Movimenti multimodali, analisi AI, Safe Havens, Débriefing post-missione e archivio storico
           </p>
         </div>
 
@@ -2136,19 +2632,32 @@ export default function MissionBoard({
             Le mie ({myMissionsCount})
           </button>
 
-          {(['tutte', 'pianificata', 'in corso', 'chiusa'] as const).map((tab) => (
+          {(
+            [
+              { id: 'attive', label: 'Attive' },
+              { id: 'pianificata', label: 'Pianificate' },
+              { id: 'in corso', label: 'In Corso' },
+              { id: 'registro', label: `Registro (${closedRegistryCount})` },
+              { id: 'tutte', label: 'Tutte' },
+            ] as const
+          ).map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
-              onClick={() => setFilter(tab)}
+              onClick={() => setFilter(tab.id)}
               className={
-                'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase border transition ' +
-                (filter === tab
+                'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase border transition flex items-center gap-1.5 ' +
+                (filter === tab.id
                   ? 'bg-neutral-100 text-neutral-950 border-neutral-100 font-bold'
                   : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
               }
             >
-              {tab}
+              <span>{tab.label}</span>
+              {tab.id === 'registro' && pendingMyDebriefCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-neutral-950 text-[11px] font-bold animate-pulse">
+                  !
+                </span>
+              )}
             </button>
           ))}
 
@@ -2698,19 +3207,30 @@ export default function MissionBoard({
       <div className="mt-5 space-y-4">
         {filteredMissions.length > 0 ? (
           filteredMissions.map((mission) => {
-            const isAssignedToMe = mission.assigned_operator_id === userId
+            const isClosed = mission.status === 'chiusa'
+            const isArchived = isClosed && Boolean(mission.debriefing_completed_at)
+            const isExecutor = mission.assigned_operator_id === userId
+            const canCompileDebrief = isClosed && !isArchived && isExecutor
+            const canUserClose =
+              !isClosed && (!mission.assigned_operator_id || mission.assigned_operator_id === userId)
+
             const risk = riskList.find((r) => r.mission_id === mission.id)
             const brief = isAdmin
               ? briefList.find((b) => b.mission_id === mission.id)
               : undefined
             const isRiskExpanded = expandedRiskId === mission.id
             const isBriefExpanded = isAdmin && expandedBriefId === mission.id
+            const isDebriefExpanded =
+              isClosed && (expandedDebriefId === mission.id || canCompileDebrief)
+
             const isCheckingIn = checkingInId === mission.id
             const lastCheckIn = lastCheckIns[mission.id]
             const isConfirmingSos = sosConfirmId === mission.id
             const isSendingSos = sendingSosId === mission.id
             const sosAlert = sentSosAlerts[mission.id]
             const isAnalyzingThis = analyzingMissionId === mission.id
+            const isConfirmingClose = closeConfirmMissionId === mission.id
+            const isClosingThis = closingMissionId === mission.id
             const missionLegs = Array.isArray(mission.route_legs) ? mission.route_legs : []
 
             return (
@@ -2720,7 +3240,11 @@ export default function MissionBoard({
                   'bg-neutral-950 border rounded-xl p-4 sm:p-5 space-y-4 ' +
                   (sosAlert
                     ? 'border-red-600'
-                    : isAssignedToMe
+                    : canCompileDebrief
+                    ? 'border-amber-500/80'
+                    : isClosed
+                    ? 'border-neutral-800/80'
+                    : isExecutor
                     ? 'border-emerald-700/80'
                     : 'border-neutral-800')
                 }
@@ -2736,6 +3260,19 @@ export default function MissionBoard({
                       >
                         {mission.status}
                       </span>
+
+                      {isArchived && (
+                        <span className="px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold bg-emerald-950/70 text-emerald-300 border-emerald-700">
+                          Archiviata in Registro
+                        </span>
+                      )}
+
+                      {isClosed && !isArchived && (
+                        <span className="px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold bg-amber-950/80 text-amber-300 border-amber-600 animate-pulse">
+                          In Attesa Débriefing Operatore
+                        </span>
+                      )}
+
                       <span
                         className={
                           'px-2.5 py-0.5 rounded-md border text-xs uppercase font-bold ' +
@@ -2780,6 +3317,12 @@ export default function MissionBoard({
                     <div className="text-neutral-300 font-mono text-xs sm:text-sm">
                       <span className="text-neutral-400 font-sans">Finestra:</span>{' '}
                       {formatDateTime(mission.start_time)} &rarr; {formatDateTime(mission.end_time)}
+                      {mission.closed_at && (
+                        <span className="text-neutral-400">
+                          {' '}
+                          (Chiusa il {formatDateTime(mission.closed_at)})
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-neutral-100 text-sm sm:text-base font-medium">
@@ -2898,11 +3441,43 @@ export default function MissionBoard({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                    {isClosed && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!canCompileDebrief) {
+                            setExpandedDebriefId(isDebriefExpanded ? null : mission.id)
+                            if (!isDebriefExpanded) {
+                              setExpandedRiskId(null)
+                              setExpandedBriefId(null)
+                            }
+                          }
+                        }}
+                        className={
+                          'min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
+                          (canCompileDebrief
+                            ? 'bg-amber-400 text-neutral-950 border-amber-300'
+                            : isDebriefExpanded
+                            ? 'bg-emerald-400 text-neutral-950 border-emerald-400'
+                            : 'bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border-emerald-700/80')
+                        }
+                      >
+                        {canCompileDebrief
+                          ? 'Compila Débriefing'
+                          : isDebriefExpanded
+                          ? 'Chiudi Débriefing'
+                          : 'Débriefing Operativo'}
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
                         setExpandedRiskId(isRiskExpanded ? null : mission.id)
-                        if (!isRiskExpanded) setExpandedBriefId(null)
+                        if (!isRiskExpanded) {
+                          setExpandedBriefId(null)
+                          if (!canCompileDebrief) setExpandedDebriefId(null)
+                        }
                       }}
                       className={
                         'min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
@@ -2923,7 +3498,10 @@ export default function MissionBoard({
                         type="button"
                         onClick={() => {
                           setExpandedBriefId(isBriefExpanded ? null : mission.id)
-                          if (!isBriefExpanded) setExpandedRiskId(null)
+                          if (!isBriefExpanded) {
+                            setExpandedRiskId(null)
+                            if (!canCompileDebrief) setExpandedDebriefId(null)
+                          }
                         }}
                         className={
                           'min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
@@ -2936,34 +3514,38 @@ export default function MissionBoard({
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      disabled={isCheckingIn}
-                      onClick={() => handleGpsCheckIn(mission)}
-                      className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-sky-300 border-sky-800/80 disabled:opacity-50"
-                    >
-                      {isCheckingIn ? 'GPS...' : 'Check-in GPS'}
-                    </button>
+                    {!isClosed && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isCheckingIn}
+                          onClick={() => handleGpsCheckIn(mission)}
+                          className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-semibold border transition bg-neutral-900 hover:bg-neutral-800 text-sky-300 border-sky-800/80 disabled:opacity-50"
+                        >
+                          {isCheckingIn ? 'GPS...' : 'Check-in GPS'}
+                        </button>
 
-                    <button
-                      type="button"
-                      disabled={isSendingSos}
-                      onClick={() => handleSosClick(mission)}
-                      title="Doppio clic rapido per inviare allerta SOS con posizione GPS"
-                      className={
-                        'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
-                        (isConfirmingSos
-                          ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
-                          : 'bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800') +
-                        ' disabled:opacity-50'
-                      }
-                    >
-                      {isSendingSos
-                        ? 'INVIO...'
-                        : isConfirmingSos
-                        ? 'CONFERMA!'
-                        : 'SOS'}
-                    </button>
+                        <button
+                          type="button"
+                          disabled={isSendingSos}
+                          onClick={() => handleSosClick(mission)}
+                          title="Doppio clic rapido per inviare allerta SOS con posizione GPS"
+                          className={
+                            'min-h-[38px] px-3 py-1.5 rounded-lg text-xs uppercase tracking-wider font-bold border transition ' +
+                            (isConfirmingSos
+                              ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
+                              : 'bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800') +
+                            ' disabled:opacity-50'
+                          }
+                        >
+                          {isSendingSos
+                            ? 'INVIO...'
+                            : isConfirmingSos
+                            ? 'CONFERMA!'
+                            : 'SOS'}
+                        </button>
+                      </>
+                    )}
 
                     <button
                       type="button"
@@ -2989,7 +3571,7 @@ export default function MissionBoard({
                       .ICS
                     </button>
 
-                    {isAdmin && (
+                    {!isClosed && isAdmin && (
                       <button
                         type="button"
                         onClick={() => handleEditMission(mission)}
@@ -2999,12 +3581,12 @@ export default function MissionBoard({
                       </button>
                     )}
 
-                    {isAdmin && (
+                    {!isClosed && isAdmin && (
                       <select
                         aria-label="Assegna operatore"
                         value={mission.assigned_operator_id || ''}
                         onChange={(e) =>
-                          handleReassignOperator(mission.id, mission.client_vip, e.target.value)
+                          handleReassignOperator(mission, e.target.value)
                         }
                         className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold rounded-lg px-3 py-1.5"
                       >
@@ -3018,27 +3600,34 @@ export default function MissionBoard({
                       </select>
                     )}
 
-                    <select
-                      aria-label="Stato missione"
-                      value={mission.status}
-                      onChange={(e) =>
-                        handleStatusChange(
-                          mission.id,
-                          mission.client_vip,
-                          e.target.value as Mission['status']
-                        )
-                      }
-                      className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
-                    >
-                      <option value="pianificata">Pianificata</option>
-                      <option value="in corso">In Corso</option>
-                      <option value="chiusa">Chiusa</option>
-                    </select>
+                    {!isClosed ? (
+                      <select
+                        aria-label="Stato missione"
+                        value={mission.status}
+                        onChange={(e) =>
+                          handleStatusChange(
+                            mission,
+                            e.target.value as Mission['status']
+                          )
+                        }
+                        className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
+                      >
+                        <option value="pianificata">Pianificata</option>
+                        <option value="in corso">In Corso</option>
+                        <option value="chiusa" disabled={!canUserClose}>
+                          {canUserClose ? 'Chiudi Missione...' : 'Chiusa (Solo Op. Assegnato)'}
+                        </option>
+                      </select>
+                    ) : (
+                      <span className="min-h-[38px] inline-flex items-center px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 text-xs font-bold uppercase">
+                        Bloccata
+                      </span>
+                    )}
 
-                    {isAdmin && (
+                    {!isClosed && isAdmin && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteMission(mission.id, mission.client_vip)}
+                        onClick={() => handleDeleteMission(mission)}
                         className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                       >
                         Elimina
@@ -3047,9 +3636,47 @@ export default function MissionBoard({
                   </div>
                 </div>
 
+                {!isClosed && isConfirmingClose && (
+                  <div className="p-4 bg-amber-950/40 border border-amber-500/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                    <div className="text-amber-100">
+                      <strong>Confermi la chiusura definitiva?</strong> Una volta chiusa, la missione non potrà più essere riaperta, modificata o eliminata, e dovrai compilare il <strong>Débriefing Operativo</strong> per l&apos;archiviazione nel Registro.
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={isClosingThis}
+                        onClick={() => setCloseConfirmMissionId(null)}
+                        className="min-h-[38px] bg-neutral-900 text-neutral-200 border border-neutral-700 text-xs uppercase font-semibold px-3.5 py-1.5 rounded-lg"
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isClosingThis}
+                        onClick={() => handleConfirmCloseMission(mission)}
+                        className="min-h-[38px] bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs uppercase font-bold px-4 py-1.5 rounded-lg transition disabled:opacity-50"
+                      >
+                        {isClosingThis ? 'Chiusura...' : 'Conferma Chiusura'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isDebriefExpanded && (
+                  <MissionDebriefingPanel
+                    canCompile={canCompileDebrief}
+                    mission={mission}
+                    onAuditUpdated={onAuditUpdated}
+                    onDebriefingSaved={handleDebriefingSaved}
+                    operatorLabel={formatOperatorLabel(mission.assigned_operator_id)}
+                    userEmail={userEmail}
+                  />
+                )}
+
                 {isBriefExpanded && (
                   <ExecutiveBriefPanel
                     brief={brief}
+                    isLockedClosed={isClosed}
                     mission={mission}
                     onAuditUpdated={onAuditUpdated}
                     onBriefSaved={handleBriefSaved}
@@ -3068,6 +3695,7 @@ export default function MissionBoard({
                     endTime={mission.end_time}
                     isAdmin={isAdmin}
                     isAnalyzingAi={isAnalyzingThis}
+                    isLockedClosed={isClosed}
                     missionId={mission.id}
                     notes={mission.notes}
                     onRunAiAnalysis={() => runAiRouteRiskAnalysis(mission)}
@@ -3088,7 +3716,9 @@ export default function MissionBoard({
           })
         ) : (
           <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
-            Nessuna missione presente per il filtro selezionato.
+            {filter === 'registro'
+              ? 'Nessuna missione chiusa presente nel Registro.'
+              : 'Nessuna missione presente per il filtro selezionato.'}
           </div>
         )}
       </div>
