@@ -35,13 +35,23 @@ export interface ExpenseLogItem {
   reimbursement_status: 'DA RENDICONTARE' | 'INVIATO' | 'RIMBORSATO'
 }
 
+interface TeamMemberOption {
+  id: string
+  email: string
+  full_name: string | null
+  callsign: string | null
+  role: string | null
+}
+
 interface OperationsControlProps {
   userEmail: string
+  isAdmin?: boolean
   onAuditUpdated?: () => void
 }
 
 export default function OperationsControl({
   userEmail,
+  isAdmin = true,
   onAuditUpdated,
 }: OperationsControlProps) {
   const supabase = useMemo(() => createClient(), [])
@@ -54,6 +64,7 @@ export default function OperationsControl({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([])
   const [actions, setActions] = useState<ActionItem[]>([])
   const [vendors, setVendors] = useState<VendorItem[]>([])
   const [expenses, setExpenses] = useState<ExpenseLogItem[]>([])
@@ -99,30 +110,51 @@ export default function OperationsControl({
     )}:${pad(d.getMinutes())}`
   }
 
+  const formatMemberLabel = (m: TeamMemberOption) => {
+    const baseName = m.full_name || m.email
+    return m.callsign ? `[${m.callsign}] ${baseName}` : baseName
+  }
+
   const loadAllOperations = useCallback(async () => {
-    const [actionsRes, vendorsRes, expensesRes] = await Promise.all([
+    const [actionsRes, profilesRes] = await Promise.all([
       supabase
         .from('action_items')
         .select('*')
         .order('due_date', { ascending: true, nullsFirst: false }),
       supabase
-        .from('vendors')
-        .select('*')
-        .order('name', { ascending: true }),
-      supabase
-        .from('expense_logs')
-        .select('*')
-        .order('expense_date', { ascending: false }),
+        .from('profiles')
+        .select('id, email, full_name, callsign, role')
+        .eq('is_active', true)
+        .order('callsign', { ascending: true }),
     ])
 
     if (actionsRes.data) setActions(actionsRes.data)
-    if (vendorsRes.data) setVendors(vendorsRes.data)
-    if (expensesRes.data) setExpenses(expensesRes.data)
-  }, [supabase])
+    if (profilesRes.data) {
+      const assignable = (profilesRes.data as TeamMemberOption[]).filter(
+        (p) => String(p.role || '').trim().toLowerCase() !== 'executive'
+      )
+      setTeamMembers(assignable)
+    }
+
+    if (isAdmin) {
+      const [vendorsRes, expensesRes] = await Promise.all([
+        supabase.from('vendors').select('*').order('name', { ascending: true }),
+        supabase.from('expense_logs').select('*').order('expense_date', { ascending: false }),
+      ])
+      if (vendorsRes.data) setVendors(vendorsRes.data)
+      if (expensesRes.data) setExpenses(expensesRes.data)
+    }
+  }, [supabase, isAdmin])
 
   useEffect(() => {
     loadAllOperations()
   }, [loadAllOperations])
+
+  useEffect(() => {
+    if (!isAdmin && activeTab !== 'actions') {
+      setActiveTab('actions')
+    }
+  }, [isAdmin, activeTab])
 
   const resetActionForm = () => {
     setEditingActionId(null)
@@ -299,6 +331,7 @@ export default function OperationsControl({
 
   const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAdmin) return
     setLoading(true)
     setError(null)
 
@@ -351,6 +384,7 @@ export default function OperationsControl({
   }
 
   const handleDeleteVendor = async (vendor: VendorItem) => {
+    if (!isAdmin) return
     const { error: delErr } = await supabase.from('vendors').delete().eq('id', vendor.id)
     if (delErr) {
       setError('Errore rimozione fornitore.')
@@ -388,6 +422,7 @@ export default function OperationsControl({
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAdmin) return
     setLoading(true)
     setError(null)
 
@@ -453,6 +488,7 @@ export default function OperationsControl({
     exp: ExpenseLogItem,
     newStatus: 'DA RENDICONTARE' | 'INVIATO' | 'RIMBORSATO'
   ) => {
+    if (!isAdmin) return
     const { error: updErr } = await supabase
       .from('expense_logs')
       .update({ reimbursement_status: newStatus })
@@ -476,6 +512,7 @@ export default function OperationsControl({
   }
 
   const handleDeleteExpense = async (exp: ExpenseLogItem) => {
+    if (!isAdmin) return
     const { error: delErr } = await supabase.from('expense_logs').delete().eq('id', exp.id)
     if (delErr) {
       setError('Errore eliminazione voce spesa.')
@@ -558,14 +595,18 @@ export default function OperationsControl({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 text-xs font-bold uppercase">
-              Chief of Staff
+              {isAdmin ? 'Chief of Staff' : 'Deleghe Direzione'}
             </span>
             <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
-              Action Tracker, Fornitori Fidati &amp; Spese Rapide
+              {isAdmin
+                ? 'Action Tracker, Fornitori Fidati & Spese Rapide'
+                : 'Deleghe & Assegnazione Compiti al Team'}
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-            Controllo deleghe e scadenze, rubrica fornitori selezionati e rendicontazione spese
+            {isAdmin
+              ? 'Controllo deleghe e scadenze, rubrica fornitori selezionati e rendicontazione spese'
+              : 'Assegnazione incarichi e task al personale operativo, scadenze e stato avanzamento'}
           </p>
         </div>
 
@@ -583,31 +624,35 @@ export default function OperationsControl({
             Deleghe &amp; Task ({openActionsCount})
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('vendors')}
-            className={
-              'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
-              (activeTab === 'vendors'
-                ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
-                : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
-            }
-          >
-            Fornitori ({vendors.length})
-          </button>
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('vendors')}
+                className={
+                  'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
+                  (activeTab === 'vendors'
+                    ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
+                    : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
+                }
+              >
+                Fornitori ({vendors.length})
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('expenses')}
-            className={
-              'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
-              (activeTab === 'expenses'
-                ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
-                : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
-            }
-          >
-            Spese ({expenses.length})
-          </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('expenses')}
+                className={
+                  'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
+                  (activeTab === 'expenses'
+                    ? 'bg-indigo-400 text-neutral-950 border-indigo-400'
+                    : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
+                }
+              >
+                Spese ({expenses.length})
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -672,20 +717,20 @@ export default function OperationsControl({
               <div className="text-sm uppercase tracking-wider text-indigo-300 font-bold">
                 {editingActionId
                   ? 'Modifica Incarico / Follow-up Direzione'
-                  : 'Nuovo Incarico / Follow-up Direzione'}
+                  : 'Nuovo Incarico / Assegnazione Compito'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
                 <div className="md:col-span-2">
                   <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Oggetto Incarico / Azione Richiesta *
+                    Oggetto Incarico / Compito Richiesto *
                   </label>
                   <input
                     type="text"
                     required
                     value={actionTitle}
                     onChange={(e) => setActionTitle(e.target.value)}
-                    placeholder="Es. Invio bozza contratto NDA / Conferma slot eliporto"
+                    placeholder="Es. Verifica dotazioni residenza / Conferma slot eliporto"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
@@ -694,12 +739,36 @@ export default function OperationsControl({
                   <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
                     Responsabile / Delegato *
                   </label>
+                  {teamMembers.length > 0 && (
+                    <select
+                      aria-label="Seleziona membro del team"
+                      value={
+                        teamMembers.some((m) => formatMemberLabel(m) === actionOwner)
+                          ? actionOwner
+                          : ''
+                      }
+                      onChange={(e) => {
+                        if (e.target.value) setActionOwner(e.target.value)
+                      }}
+                      className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-indigo-200"
+                    >
+                      <option value="">-- Seleziona membro team --</option>
+                      {teamMembers.map((m) => {
+                        const label = formatMemberLabel(m)
+                        return (
+                          <option key={m.id} value={label}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  )}
                   <input
                     type="text"
                     required
                     value={actionOwner}
                     onChange={(e) => setActionOwner(e.target.value)}
-                    placeholder="Nome collaboratore o studio"
+                    placeholder="Operatore, Admin o collaboratore esterno"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
@@ -735,13 +804,13 @@ export default function OperationsControl({
 
                 <div className="md:col-span-3">
                   <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                    Note Operative / Solleciti
+                    Note Operative / Istruzioni
                   </label>
                   <input
                     type="text"
                     value={actionNotes}
                     onChange={(e) => setActionNotes(e.target.value)}
-                    placeholder="Dettagli aggiuntivi o stato avanzamento"
+                    placeholder="Dettagli aggiuntivi, tempistiche o stato avanzamento"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
@@ -764,7 +833,7 @@ export default function OperationsControl({
                     ? 'Salvataggio...'
                     : editingActionId
                     ? 'Aggiorna Delega'
-                    : 'Registra Delega'}
+                    : 'Assegna Delega'}
                 </button>
               </div>
             </form>
@@ -879,7 +948,7 @@ export default function OperationsControl({
         </div>
       )}
 
-      {activeTab === 'vendors' && (
+      {isAdmin && activeTab === 'vendors' && (
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -1084,7 +1153,7 @@ export default function OperationsControl({
         </div>
       )}
 
-      {activeTab === 'expenses' && (
+      {isAdmin && activeTab === 'expenses' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex items-center justify-between">
