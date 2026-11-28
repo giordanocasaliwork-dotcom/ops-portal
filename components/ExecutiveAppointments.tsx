@@ -23,6 +23,7 @@ interface SiteOption {
   callsign: string
   name: string
   address: string
+  maps_url: string | null
   site_type: string
 }
 
@@ -69,7 +70,7 @@ export default function ExecutiveAppointments({
         .order('start_time', { ascending: true }),
       supabase
         .from('operational_sites')
-        .select('id, callsign, name, address, site_type')
+        .select('id, callsign, name, address, maps_url, site_type')
         .order('callsign', { ascending: true }),
     ])
 
@@ -88,6 +89,24 @@ export default function ExecutiveAppointments({
   useEffect(() => {
     loadAppointments()
   }, [loadAppointments])
+
+  const resolveLocationMapsUrl = (rawLocation: string): string => {
+    const trimmed = rawLocation.trim()
+    const callsignMatch = trimmed.match(/^\[([^\]]+)\]/)
+    if (callsignMatch) {
+      const cs = callsignMatch[1].toUpperCase()
+      const matched = sites.find((s) => s.callsign.toUpperCase() === cs)
+      if (matched?.maps_url) return matched.maps_url
+    }
+
+    const matchedByAddr = sites.find(
+      (s) => s.maps_url && trimmed.toLowerCase().includes(s.address.toLowerCase())
+    )
+    if (matchedByAddr?.maps_url) return matchedByAddr.maps_url
+
+    const cleanQuery = trimmed.replace(/^\[[^\]]+\]\s*[^—]+—\s*/, '')
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`
+  }
 
   const resetForm = () => {
     setEditingId(null)
@@ -526,6 +545,7 @@ export default function ExecutiveAppointments({
                 <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
                 <option value="Ufficio Secondario / Filiale">Ufficio Secondario / Filiale</option>
                 <option value="Residenza Privata">Residenza Privata</option>
+                <option value="Aeroporto / Stazione / Hub">Aeroporto / Stazione / Hub</option>
                 <option value="Sede Esterna / Trasferta">Sede Esterna / Trasferta</option>
                 <option value="Pranzo / Cena di Lavoro">Pranzo / Cena di Lavoro</option>
                 <option value="Video / Call Riservata">Video / Call Riservata</option>
@@ -534,25 +554,27 @@ export default function ExecutiveAppointments({
 
             <div>
               <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                Sede / Callsign Registrato oppure Indirizzo
+                Sede / Luogo (Selezione Rapida o Indirizzo)
               </label>
               {sites.length > 0 && (
                 <select
-                  aria-label="Seleziona sede registrata"
+                  aria-label="Seleziona sede da Registro Sedi/Luoghi"
                   value=""
                   onChange={(e) => {
                     const selected = sites.find((s) => s.id === e.target.value)
                     if (selected) {
-                      setLocationType(selected.site_type || 'Ufficio / Sede Centrale')
+                      if (selected.site_type) {
+                        setLocationType(selected.site_type)
+                      }
                       setLocationDetails(`[${selected.callsign}] ${selected.name} — ${selected.address}`)
                     }
                   }}
                   className="w-full mb-2 bg-neutral-900 border border-neutral-700 rounded-lg p-2 text-base sm:text-xs text-emerald-300"
                 >
-                  <option value="">-- Selezione rapida da Sedi &amp; Callsign --</option>
+                  <option value="">-- Seleziona da Registro Sedi / Luoghi --</option>
                   {sites.map((s) => (
                     <option key={s.id} value={s.id}>
-                      [{s.callsign}] {s.name} ({s.address})
+                      [{s.callsign}] {s.name} — {s.address}
                     </option>
                   ))}
                 </select>
@@ -691,9 +713,7 @@ export default function ExecutiveAppointments({
                         <span>{appt.location_details}</span>
                         {isPhysicalLocation && (
                           <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                              appt.location_details.replace(/^\[[^\]]+\]\s*/, '')
-                            )}`}
+                            href={resolveLocationMapsUrl(appt.location_details)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
