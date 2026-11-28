@@ -402,6 +402,19 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     return 'bg-neutral-900 text-neutral-300 border-neutral-700'
   }
 
+  const siteTypeBadge = (type: string) => {
+    if (type === 'Presidio FFOO / Safe Haven') {
+      return 'bg-sky-950/80 text-sky-300 border-sky-700'
+    }
+    if (type === 'Struttura Sanitaria / DEA') {
+      return 'bg-red-950/80 text-red-300 border-red-700'
+    }
+    if (type === 'Residenza Privata') {
+      return 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
+    }
+    return 'bg-neutral-900 text-neutral-300 border-neutral-700'
+  }
+
   return (
     <div className="bg-neutral-900 border border-neutral-800 border-t-2 border-t-amber-500 rounded-xl p-4 sm:p-6 shadow-xl space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-neutral-800 pb-4">
@@ -775,7 +788,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <p className="text-xs sm:text-sm text-neutral-300">
-              Censisci uffici, filiali, residenze e luoghi frequenti con <strong>Callsign</strong> e link diretto Google Maps per richiamarli subito in Appuntamenti e Missioni.
+              Censisci uffici, filiali, residenze, presidi FFOO/DEA e luoghi frequenti con <strong>Callsign</strong> e link diretto Google Maps per richiamarli subito in Appuntamenti e Missioni.
             </p>
 
             <button
@@ -816,7 +829,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     required
                     value={siteCallsign}
                     onChange={(e) => setSiteCallsign(e.target.value.toUpperCase())}
-                    placeholder="Es. HQ-EUR / RES-S / FCO-VIP"
+                    placeholder="Es. HQ-EUR / RES-S / FFOO-PS-EUR"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 font-mono text-base sm:text-sm text-white uppercase"
                   />
                 </div>
@@ -847,6 +860,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
                     <option value="Ufficio Secondario / Filiale">Ufficio Secondario / Filiale</option>
                     <option value="Residenza Privata">Residenza Privata</option>
+                    <option value="Presidio FFOO / Safe Haven">Presidio FFOO / Safe Haven</option>
+                    <option value="Struttura Sanitaria / DEA">Struttura Sanitaria / DEA</option>
                     <option value="Aeroporto / Stazione / FBO">Aeroporto / Stazione / FBO</option>
                     <option value="Hotel / Ristorante Riservato">Hotel / Ristorante Riservato</option>
                     <option value="Hub Logistico / Altro">Hub Logistico / Altro</option>
@@ -929,7 +944,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                       <span className="px-2.5 py-0.5 rounded-md bg-amber-400 text-neutral-950 font-mono text-xs font-bold uppercase">
                         {s.callsign}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 font-medium">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-md border text-xs font-semibold ${siteTypeBadge(
+                          s.site_type
+                        )}`}
+                      >
                         {s.site_type}
                       </span>
                     </div>
