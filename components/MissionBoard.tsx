@@ -111,6 +111,7 @@ function formatLegsSummaryLines(legs?: RouteLeg[] | null): string[] {
 interface MissionDebriefingPanelProps {
   mission: Mission
   canCompile: boolean
+  isAdmin: boolean
   operatorLabel: string
   userEmail: string
   onDebriefingSaved: (updatedMission: Mission) => void
@@ -120,6 +121,7 @@ interface MissionDebriefingPanelProps {
 function MissionDebriefingPanel({
   mission,
   canCompile,
+  isAdmin,
   operatorLabel,
   userEmail,
   onDebriefingSaved,
@@ -136,18 +138,31 @@ function MissionDebriefingPanel({
     )}:${pad(valid.getMinutes())}`
   }
 
+  const existing = mission.debriefing
+
+  const [editingExisting, setEditingExisting] = useState(false)
   const [outcome, setOutcome] = useState<'REGOLARE' | 'CRITICITA LIEVI' | 'ANOMALIA SICUREZZA'>(
-    'REGOLARE'
+    existing?.outcome || 'REGOLARE'
   )
-  const [actualEndTime, setActualEndTime] = useState(() => toLocalNow(mission.closed_at))
-  const [vehicleCondition, setVehicleCondition] = useState('')
-  const [operationalSummary, setOperationalSummary] = useState('')
-  const [incidentsNotes, setIncidentsNotes] = useState('')
+  const [actualEndTime, setActualEndTime] = useState(() =>
+    toLocalNow(existing?.actual_end_time || mission.closed_at)
+  )
+  const [vehicleCondition, setVehicleCondition] = useState(existing?.vehicle_condition || '')
+  const [operationalSummary, setOperationalSummary] = useState(existing?.operational_summary || '')
+  const [incidentsNotes, setIncidentsNotes] = useState(existing?.incidents_notes || '')
   const [saving, setSaving] = useState(false)
   const [copiedDebrief, setCopiedDebrief] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
 
-  const existing = mission.debriefing
+  useEffect(() => {
+    if (existing) {
+      setOutcome(existing.outcome)
+      setActualEndTime(toLocalNow(existing.actual_end_time))
+      setVehicleCondition(existing.vehicle_condition || '')
+      setOperationalSummary(existing.operational_summary || '')
+      setIncidentsNotes(existing.incidents_notes || '')
+    }
+  }, [existing])
 
   const formatDateTime = (iso: string) =>
     new Date(iso).toLocaleString('it-IT', {
@@ -160,7 +175,7 @@ function MissionDebriefingPanel({
 
   const handleSubmitDebriefing = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canCompile) return
+    if (!canCompile && !isAdmin) return
     setSaving(true)
     setPanelError(null)
 
@@ -181,7 +196,7 @@ function MissionDebriefingPanel({
         .from('missions')
         .update({
           debriefing: debriefPayload,
-          debriefing_completed_at: nowIso,
+          debriefing_completed_at: mission.debriefing_completed_at || nowIso,
         })
         .eq('id', mission.id)
         .select()
@@ -200,6 +215,7 @@ function MissionDebriefingPanel({
       if (data) {
         onDebriefingSaved(data as Mission)
       }
+      setEditingExisting(false)
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: unknown) {
       setPanelError(getErrorMessage(err, 'Errore durante il salvataggio del Débriefing Operativo.'))
@@ -230,6 +246,8 @@ function MissionDebriefingPanel({
     }
   }
 
+  const showForm = (!existing && (canCompile || isAdmin)) || (existing && isAdmin && editingExisting)
+
   return (
     <div className="border-t border-emerald-700/60 pt-4 bg-neutral-900/90 rounded-xl p-4 sm:p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -249,15 +267,26 @@ function MissionDebriefingPanel({
           </span>
         </div>
 
-        {existing && (
-          <button
-            type="button"
-            onClick={handleCopyDebrief}
-            className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
-          >
-            {copiedDebrief ? 'Débriefing Copiato' : 'Copia Débriefing'}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {existing && (
+            <button
+              type="button"
+              onClick={handleCopyDebrief}
+              className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
+            >
+              {copiedDebrief ? 'Débriefing Copiato' : 'Copia Débriefing'}
+            </button>
+          )}
+          {existing && isAdmin && !editingExisting && (
+            <button
+              type="button"
+              onClick={() => setEditingExisting(true)}
+              className="min-h-[36px] bg-neutral-950 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3.5 py-1.5 rounded-lg transition"
+            >
+              Modifica Débriefing
+            </button>
+          )}
+        </div>
       </div>
 
       {panelError && (
@@ -266,75 +295,13 @@ function MissionDebriefingPanel({
         </div>
       )}
 
-      {existing ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
-          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
-            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
-              Esito Generale &amp; Orario Conclusione
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={
-                  'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
-                  (existing.outcome === 'ANOMALIA SICUREZZA'
-                    ? 'bg-red-950 text-red-300 border-red-700'
-                    : existing.outcome === 'CRITICITA LIEVI'
-                    ? 'bg-amber-950/80 text-amber-300 border-amber-700'
-                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-700')
-                }
-              >
-                {existing.outcome}
-              </span>
-              <span className="font-mono text-neutral-200 text-xs sm:text-sm">
-                {formatDateTime(existing.actual_end_time)}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
-            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
-              Operatore Esecutore &amp; Archiviazione
-            </div>
-            <div className="text-white font-semibold">{existing.operator_label}</div>
-            <div className="text-xs font-mono text-neutral-400 mt-0.5">
-              Registrato il {formatDateTime(existing.submitted_at)}
-            </div>
-          </div>
-
-          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
-            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
-              Stato Mezzo, Chilometraggio &amp; Dotazioni
-            </div>
-            <div className="text-neutral-100 whitespace-pre-line">
-              {existing.vehicle_condition || 'Nessuna annotazione sul mezzo.'}
-            </div>
-          </div>
-
-          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
-            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
-              Relazione Svolgimento Missione
-            </div>
-            <div className="text-neutral-100 whitespace-pre-line leading-relaxed">
-              {existing.operational_summary}
-            </div>
-          </div>
-
-          {existing.incidents_notes && (
-            <div className="md:col-span-2 bg-amber-950/25 border border-amber-800/70 rounded-xl p-3.5">
-              <div className="text-xs uppercase text-amber-300 font-bold mb-1">
-                Criticità Rilevate / Note per Pianificazioni Future
-              </div>
-              <div className="text-amber-100 whitespace-pre-line leading-relaxed">
-                {existing.incidents_notes}
-              </div>
+      {showForm ? (
+        <form onSubmit={handleSubmitDebriefing} className="space-y-3.5 text-sm">
+          {!existing && (
+            <div className="p-3 bg-amber-950/40 border border-amber-700/70 rounded-lg text-amber-200 text-xs sm:text-sm">
+              La missione è chiusa. Compila il rapporto finale qui sotto per archiviare definitivamente la missione nel <strong>Registro Missioni</strong>.
             </div>
           )}
-        </div>
-      ) : canCompile ? (
-        <form onSubmit={handleSubmitDebriefing} className="space-y-3.5 text-sm">
-          <div className="p-3 bg-amber-950/40 border border-amber-700/70 rounded-lg text-amber-200 text-xs sm:text-sm">
-            La missione è chiusa e bloccata. Compila il rapporto finale qui sotto per archiviare definitivamente la missione nel <strong>Registro Missioni</strong>.
-          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
@@ -411,16 +378,93 @@ function MissionDebriefingPanel({
             </div>
           </div>
 
-          <div className="flex justify-end pt-1">
+          <div className="flex flex-wrap justify-end gap-2.5 pt-1">
+            {editingExisting && (
+              <button
+                type="button"
+                onClick={() => setEditingExisting(false)}
+                className="min-h-[40px] bg-neutral-950 text-neutral-300 border border-neutral-700 text-xs uppercase px-4 py-2 rounded-lg font-semibold"
+              >
+                Annulla
+              </button>
+            )}
             <button
               type="submit"
               disabled={saving}
               className="min-h-[42px] bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-5 py-2 rounded-lg transition disabled:opacity-50"
             >
-              {saving ? 'Archiviazione in corso...' : 'Conferma Débriefing & Archivia'}
+              {saving
+                ? 'Salvataggio...'
+                : existing
+                ? 'Aggiorna Débriefing'
+                : 'Conferma Débriefing & Archivia'}
             </button>
           </div>
         </form>
+      ) : existing ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
+              Esito Generale &amp; Orario Conclusione
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={
+                  'px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ' +
+                  (existing.outcome === 'ANOMALIA SICUREZZA'
+                    ? 'bg-red-950 text-red-300 border-red-700'
+                    : existing.outcome === 'CRITICITA LIEVI'
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-700'
+                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-700')
+                }
+              >
+                {existing.outcome}
+              </span>
+              <span className="font-mono text-neutral-200 text-xs sm:text-sm">
+                {formatDateTime(existing.actual_end_time)}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-neutral-400 font-bold mb-1">
+              Operatore Esecutore &amp; Archiviazione
+            </div>
+            <div className="text-white font-semibold">{existing.operator_label}</div>
+            <div className="text-xs font-mono text-neutral-400 mt-0.5">
+              Registrato il {formatDateTime(existing.submitted_at)}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
+              Stato Mezzo, Chilometraggio &amp; Dotazioni
+            </div>
+            <div className="text-neutral-100 whitespace-pre-line">
+              {existing.vehicle_condition || 'Nessuna annotazione sul mezzo.'}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-3.5">
+            <div className="text-xs uppercase text-emerald-400 font-bold mb-1">
+              Relazione Svolgimento Missione
+            </div>
+            <div className="text-neutral-100 whitespace-pre-line leading-relaxed">
+              {existing.operational_summary}
+            </div>
+          </div>
+
+          {existing.incidents_notes && (
+            <div className="md:col-span-2 bg-amber-950/25 border border-amber-800/70 rounded-xl p-3.5">
+              <div className="text-xs uppercase text-amber-300 font-bold mb-1">
+                Criticità Rilevate / Note per Pianificazioni Future
+              </div>
+              <div className="text-amber-100 whitespace-pre-line leading-relaxed">
+                {existing.incidents_notes}
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="p-3.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm text-neutral-300">
           In attesa che l&apos;operatore esecutore (<strong>{operatorLabel}</strong>) compili il Débriefing Operativo per completare l&apos;archiviazione nel Registro.
@@ -1236,6 +1280,7 @@ interface OperatorOption {
   email: string
   full_name: string | null
   callsign: string | null
+  role?: string | null
   is_active: boolean
 }
 
@@ -1305,6 +1350,7 @@ export default function MissionBoard({
   const [editingMissionId, setEditingMissionId] = useState<string | null>(null)
   const [closeConfirmMissionId, setCloseConfirmMissionId] = useState<string | null>(null)
   const [closingMissionId, setClosingMissionId] = useState<string | null>(null)
+  const [deleteConfirmMissionId, setDeleteConfirmMissionId] = useState<string | null>(null)
   const [showFleet, setShowFleet] = useState(false)
   const [showMorningBrief, setShowMorningBrief] = useState(false)
   const [copiedMorningBrief, setCopiedMorningBrief] = useState(false)
@@ -1415,7 +1461,7 @@ export default function MissionBoard({
   }
 
   const handleEditMission = (mission: Mission) => {
-    if (mission.status === 'chiusa') return
+    if (!isAdmin && mission.status === 'chiusa') return
     setError(null)
     setEditingMissionId(mission.id)
     setClientVip(mission.client_vip || '')
@@ -1731,7 +1777,7 @@ export default function MissionBoard({
   const loadAssets = useCallback(async () => {
     const opsRes = await supabase
       .from('profiles')
-      .select('id, email, full_name, callsign, is_active')
+      .select('id, email, full_name, callsign, role, is_active')
       .eq('is_active', true)
       .order('callsign', { ascending: true })
 
@@ -1742,7 +1788,13 @@ export default function MissionBoard({
 
     const riskRes = await supabase.from('mission_risk_assessments').select('*')
 
-    if (opsRes.data) setOperators(opsRes.data)
+    if (opsRes.data) {
+      // Esclude l'account Executive dalle assegnazioni operative (è il capo/cliente del team)
+      const assignableOps = (opsRes.data as OperatorOption[]).filter(
+        (op) => String(op.role || '').trim().toLowerCase() !== 'executive'
+      )
+      setOperators(assignableOps)
+    }
     if (vehRes.data) setVehicles(vehRes.data)
     if (riskRes.data) setRiskList(riskRes.data)
 
@@ -1763,6 +1815,14 @@ export default function MissionBoard({
     }, 5000)
     return () => clearTimeout(timer)
   }, [sosConfirmId])
+
+  useEffect(() => {
+    if (!deleteConfirmMissionId) return
+    const timer = setTimeout(() => {
+      setDeleteConfirmMissionId(null)
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [deleteConfirmMissionId])
 
   const handleRiskSaved = (missionId: string, updated: RiskAssessment) => {
     setRiskList((prev) => {
@@ -1792,7 +1852,7 @@ export default function MissionBoard({
   }
 
   const runAiRouteRiskAnalysis = async (mission: Mission) => {
-    if (mission.status === 'chiusa') return
+    if (mission.status === 'chiusa' && !isAdmin) return
     setAnalyzingMissionId(mission.id)
     setExpandedRiskId(mission.id)
     setExpandedBriefId(null)
@@ -2258,6 +2318,13 @@ export default function MissionBoard({
     setError(null)
 
     try {
+      if (assignedOperatorId) {
+        const targetOp = operators.find((o) => o.id === assignedOperatorId)
+        if (!targetOp || String(targetOp.role || '').trim().toLowerCase() === 'executive') {
+          throw new Error('Non è possibile assegnare una missione operativa all\'account Executive.')
+        }
+      }
+
       let vehicleSummary = ''
       let vehicleIdToSave: string | null = null
 
@@ -2390,8 +2457,16 @@ export default function MissionBoard({
     mission: Mission,
     newOpId: string
   ) => {
-    if (mission.status === 'chiusa') return
+    if (!isAdmin) return
     const cleanOpId = newOpId || null
+    if (cleanOpId) {
+      const targetOp = operators.find((o) => o.id === cleanOpId)
+      if (!targetOp || String(targetOp.role || '').trim().toLowerCase() === 'executive') {
+        setError('Non è possibile assegnare missioni operative all\'account Executive.')
+        return
+      }
+    }
+
     const previous = [...missions]
 
     setMissions((prev) =>
@@ -2423,32 +2498,43 @@ export default function MissionBoard({
     mission: Mission,
     newStatus: 'pianificata' | 'in corso' | 'chiusa'
   ) => {
-    if (mission.status === 'chiusa') {
+    if (!isAdmin && mission.status === 'chiusa') {
       setError('Una missione chiusa è archiviata nel Registro e non può essere riaperta.')
       return
     }
 
-    if (newStatus === 'chiusa') {
-      if (mission.assigned_operator_id && mission.assigned_operator_id !== userId) {
-        setError(
-          `Solo l'operatore assegnato (${formatOperatorLabel(
-            mission.assigned_operator_id
-          )}) può chiudere questa missione e compilare il Débriefing.`
-        )
-        return
-      }
+    if (!isAdmin && mission.assigned_operator_id !== userId) {
+      setError('Puoi aggiornare esclusivamente le missioni a te assegnate.')
+      return
+    }
+
+    if (newStatus === 'chiusa' && mission.status !== 'chiusa') {
       setCloseConfirmMissionId(mission.id)
       return
     }
 
     const previous = [...missions]
+    const reopeningFromClosed = mission.status === 'chiusa' && newStatus !== 'chiusa'
+
     setMissions((prev) =>
-      prev.map((m) => (m.id === mission.id ? { ...m, status: newStatus } : m))
+      prev.map((m) =>
+        m.id === mission.id
+          ? {
+              ...m,
+              status: newStatus,
+              closed_at: reopeningFromClosed ? null : m.closed_at,
+              closed_by: reopeningFromClosed ? null : m.closed_by,
+            }
+          : m
+      )
     )
 
     const { error: updateError } = await supabase
       .from('missions')
-      .update({ status: newStatus })
+      .update({
+        status: newStatus,
+        ...(reopeningFromClosed ? { closed_at: null, closed_by: null } : {}),
+      })
       .eq('id', mission.id)
 
     if (updateError) {
@@ -2471,8 +2557,8 @@ export default function MissionBoard({
 
   const handleConfirmCloseMission = async (mission: Mission) => {
     if (mission.status === 'chiusa') return
-    if (mission.assigned_operator_id && mission.assigned_operator_id !== userId) {
-      setError('Solo l operatore che ha eseguito la missione può chiuderla.')
+    if (!isAdmin && mission.assigned_operator_id !== userId) {
+      setError('Solo l operatore assegnato può chiudere questa missione.')
       setCloseConfirmMissionId(null)
       return
     }
@@ -2482,13 +2568,13 @@ export default function MissionBoard({
 
     try {
       const nowIso = new Date().toISOString()
-      const executorId = mission.assigned_operator_id || userId
+      const executorId = mission.assigned_operator_id || (isAdmin ? null : userId)
 
       const { data, error: closeErr } = await supabase
         .from('missions')
         .update({
           status: 'chiusa',
-          assigned_operator_id: executorId,
+          ...(executorId ? { assigned_operator_id: executorId } : {}),
           closed_at: nowIso,
           closed_by: userId,
         })
@@ -2501,7 +2587,7 @@ export default function MissionBoard({
       await supabase.from('audit_logs').insert([
         {
           user_email: userEmail,
-          action: `MISSION_CLOSED_LOCKED (${mission.client_vip}) — In attesa Débriefing Operatore`,
+          action: `MISSION_CLOSED (${mission.client_vip}) — Spostata nel Registro`,
           status: 'SUCCESS',
         },
       ])
@@ -2530,18 +2616,24 @@ export default function MissionBoard({
       if (onAuditUpdated) onAuditUpdated()
       router.refresh()
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Errore durante la chiusura definitiva della missione.'))
+      setError(getErrorMessage(err, 'Errore durante la chiusura della missione.'))
     } finally {
       setClosingMissionId(null)
     }
   }
 
   const handleDeleteMission = async (mission: Mission) => {
-    if (mission.status === 'chiusa') {
-      setError('Le missioni chiuse sono archiviate nel Registro e non possono essere eliminate.')
+    if (!isAdmin) {
+      setError('Solo l amministratore può eliminare definitivamente le missioni.')
       return
     }
 
+    if (mission.status === 'chiusa' && deleteConfirmMissionId !== mission.id) {
+      setDeleteConfirmMissionId(mission.id)
+      return
+    }
+
+    setDeleteConfirmMissionId(null)
     const previous = [...missions]
     setMissions((prev) => prev.filter((m) => m.id !== mission.id))
 
@@ -2563,7 +2655,7 @@ export default function MissionBoard({
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
-        action: 'MISSION_DELETE (' + mission.client_vip + ')',
+        action: 'MISSION_DELETE_ADMIN (' + mission.client_vip + ')',
         status: 'SUCCESS',
       },
     ])
@@ -2888,7 +2980,7 @@ export default function MissionBoard({
 
             <div>
               <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
-                Operatore Assegnato (Callsign)
+                Operatore Assegnato (Escluso Executive)
               </label>
               <select
                 value={assignedOperatorId}
@@ -3210,9 +3302,9 @@ export default function MissionBoard({
             const isClosed = mission.status === 'chiusa'
             const isArchived = isClosed && Boolean(mission.debriefing_completed_at)
             const isExecutor = mission.assigned_operator_id === userId
-            const canCompileDebrief = isClosed && !isArchived && isExecutor
-            const canUserClose =
-              !isClosed && (!mission.assigned_operator_id || mission.assigned_operator_id === userId)
+            const canCompileDebrief = isClosed && !isArchived && (isExecutor || isAdmin)
+            const canUserClose = !isClosed && (isAdmin || isExecutor)
+            const canOperatorUpdate = !isClosed && (isAdmin || isExecutor)
 
             const risk = riskList.find((r) => r.mission_id === mission.id)
             const brief = isAdmin
@@ -3231,6 +3323,7 @@ export default function MissionBoard({
             const isAnalyzingThis = analyzingMissionId === mission.id
             const isConfirmingClose = closeConfirmMissionId === mission.id
             const isClosingThis = closingMissionId === mission.id
+            const isConfirmingDelete = deleteConfirmMissionId === mission.id
             const missionLegs = Array.isArray(mission.route_legs) ? mission.route_legs : []
 
             return (
@@ -3514,7 +3607,7 @@ export default function MissionBoard({
                       </button>
                     )}
 
-                    {!isClosed && (
+                    {!isClosed && canOperatorUpdate && (
                       <>
                         <button
                           type="button"
@@ -3571,7 +3664,7 @@ export default function MissionBoard({
                       .ICS
                     </button>
 
-                    {!isClosed && isAdmin && (
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => handleEditMission(mission)}
@@ -3581,7 +3674,7 @@ export default function MissionBoard({
                       </button>
                     )}
 
-                    {!isClosed && isAdmin && (
+                    {isAdmin && (
                       <select
                         aria-label="Assegna operatore"
                         value={mission.assigned_operator_id || ''}
@@ -3600,7 +3693,25 @@ export default function MissionBoard({
                       </select>
                     )}
 
-                    {!isClosed ? (
+                    {isAdmin ? (
+                      <select
+                        aria-label="Stato missione"
+                        value={mission.status}
+                        onChange={(e) =>
+                          handleStatusChange(
+                            mission,
+                            e.target.value as Mission['status']
+                          )
+                        }
+                        className="min-h-[38px] bg-neutral-900 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase rounded-lg px-3 py-1.5"
+                      >
+                        <option value="pianificata">Pianificata</option>
+                        <option value="in corso">In Corso</option>
+                        <option value="chiusa">
+                          {isClosed ? 'Chiusa (Registro)' : 'Chiudi Missione...'}
+                        </option>
+                      </select>
+                    ) : !isClosed && canOperatorUpdate ? (
                       <select
                         aria-label="Stato missione"
                         value={mission.status}
@@ -3615,22 +3726,32 @@ export default function MissionBoard({
                         <option value="pianificata">Pianificata</option>
                         <option value="in corso">In Corso</option>
                         <option value="chiusa" disabled={!canUserClose}>
-                          {canUserClose ? 'Chiudi Missione...' : 'Chiusa (Solo Op. Assegnato)'}
+                          Chiudi Missione...
                         </option>
                       </select>
                     ) : (
                       <span className="min-h-[38px] inline-flex items-center px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 text-xs font-bold uppercase">
-                        Bloccata
+                        {isClosed ? 'Bloccata' : 'Sola Lettura'}
                       </span>
                     )}
 
-                    {!isClosed && isAdmin && (
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => handleDeleteMission(mission)}
-                        className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                        title={
+                          isClosed
+                            ? 'Doppio clic rapido per eliminare definitivamente dal Registro'
+                            : 'Elimina missione'
+                        }
+                        className={
+                          'min-h-[38px] text-xs font-semibold uppercase px-3 py-1.5 rounded-lg border transition ' +
+                          (isConfirmingDelete
+                            ? 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
+                            : 'bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border-neutral-800 hover:border-red-800')
+                        }
                       >
-                        Elimina
+                        {isConfirmingDelete ? 'Conferma Elimina?' : 'Elimina'}
                       </button>
                     )}
                   </div>
@@ -3639,7 +3760,7 @@ export default function MissionBoard({
                 {!isClosed && isConfirmingClose && (
                   <div className="p-4 bg-amber-950/40 border border-amber-500/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                     <div className="text-amber-100">
-                      <strong>Confermi la chiusura definitiva?</strong> Una volta chiusa, la missione non potrà più essere riaperta, modificata o eliminata, e dovrai compilare il <strong>Débriefing Operativo</strong> per l&apos;archiviazione nel Registro.
+                      <strong>Confermi la chiusura della missione?</strong> Verrà spostata nel <strong>Registro</strong> e potrai compilare il <strong>Débriefing Operativo</strong> finale.
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
@@ -3665,6 +3786,7 @@ export default function MissionBoard({
                 {isDebriefExpanded && (
                   <MissionDebriefingPanel
                     canCompile={canCompileDebrief}
+                    isAdmin={isAdmin}
                     mission={mission}
                     onAuditUpdated={onAuditUpdated}
                     onDebriefingSaved={handleDebriefingSaved}
@@ -3676,7 +3798,7 @@ export default function MissionBoard({
                 {isBriefExpanded && (
                   <ExecutiveBriefPanel
                     brief={brief}
-                    isLockedClosed={isClosed}
+                    isLockedClosed={isClosed && !isAdmin}
                     mission={mission}
                     onAuditUpdated={onAuditUpdated}
                     onBriefSaved={handleBriefSaved}
@@ -3695,7 +3817,7 @@ export default function MissionBoard({
                     endTime={mission.end_time}
                     isAdmin={isAdmin}
                     isAnalyzingAi={isAnalyzingThis}
-                    isLockedClosed={isClosed}
+                    isLockedClosed={isClosed && !isAdmin}
                     missionId={mission.id}
                     notes={mission.notes}
                     onRunAiAnalysis={() => runAiRouteRiskAnalysis(mission)}
