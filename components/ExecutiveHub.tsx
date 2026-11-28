@@ -25,6 +25,16 @@ export interface VipPreference {
   details: string
 }
 
+export interface OperationalSite {
+  id: string
+  created_at: string
+  callsign: string
+  name: string
+  address: string
+  site_type: string
+  notes: string | null
+}
+
 interface ExecutiveHubProps {
   userEmail: string
   onAuditUpdated?: () => void
@@ -32,12 +42,12 @@ interface ExecutiveHubProps {
 
 export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHubProps) {
   const supabase = useMemo(() => createClient(), [])
-  const contactFormRef = useRef<HTMLFormElement | null>(null)
-  const prefFormRef = useRef<HTMLFormElement | null>(null)
+  const siteFormRef = useRef<HTMLFormElement | null>(null)
 
-  const [activeTab, setActiveTab] = useState<'contacts' | 'preferences'>('contacts')
+  const [activeTab, setActiveTab] = useState<'contacts' | 'preferences' | 'sites'>('contacts')
   const [contacts, setContacts] = useState<ExecutiveContact[]>([])
   const [preferences, setPreferences] = useState<VipPreference[]>([])
+  const [sites, setSites] = useState<OperationalSite[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,7 +56,6 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     'TUTTI' | 'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
   >('TUTTI')
   const [showContactForm, setShowContactForm] = useState(false)
-  const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [contactName, setContactName] = useState('')
   const [contactOrg, setContactOrg] = useState('')
   const [contactRole, setContactRole] = useState('')
@@ -63,105 +72,74 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
   const [prefCategoryFilter, setPrefCategoryFilter] = useState('TUTTE')
   const [showPrefForm, setShowPrefForm] = useState(false)
-  const [editingPrefId, setEditingPrefId] = useState<string | null>(null)
-  const [prefCategory, setPrefCategory] = useState('Viaggi & Voli')
+  const [prefCategory, setPrefCategory] = useState('Protocollo & Sicurezza')
   const [prefTitle, setPrefTitle] = useState('')
   const [prefDetails, setPrefDetails] = useState('')
 
+  const [showSiteForm, setShowSiteForm] = useState(false)
+  const [editingSiteId, setEditingSiteId] = useState<string | null>(null)
+  const [siteCallsign, setSiteCallsign] = useState('')
+  const [siteName, setSiteName] = useState('')
+  const [siteAddress, setSiteAddress] = useState('')
+  const [siteType, setSiteType] = useState('Ufficio / Sede Centrale')
+  const [siteNotes, setSiteNotes] = useState('')
+
   const loadExecutiveData = useCallback(async () => {
-    const [contactsRes, prefsRes] = await Promise.all([
+    const [contactsRes, prefsRes, sitesRes] = await Promise.all([
       supabase.from('executive_contacts').select('*').order('full_name', { ascending: true }),
       supabase.from('vip_preferences').select('*').order('category', { ascending: true }),
+      supabase.from('operational_sites').select('*').order('callsign', { ascending: true }),
     ])
 
     if (contactsRes.data) setContacts(contactsRes.data as ExecutiveContact[])
     if (prefsRes.data) setPreferences(prefsRes.data as VipPreference[])
+    if (sitesRes.data) setSites(sitesRes.data as OperationalSite[])
   }, [supabase])
 
   useEffect(() => {
     loadExecutiveData()
   }, [loadExecutiveData])
 
-  const resetContactForm = () => {
-    setEditingContactId(null)
-    setContactName('')
-    setContactOrg('')
-    setContactRole('')
-    setContactCategory('Cliente / Partner')
-    setContactTier('FILTRO SEGRETERIA')
-    setContactNda('NON RICHIESTO')
-    setContactPhone('')
-    setContactEmail('')
-    setContactNotes('')
-    setShowContactForm(false)
-  }
-
-  const handleEditContactClick = (c: ExecutiveContact) => {
-    setEditingContactId(c.id)
-    setContactName(c.full_name)
-    setContactOrg(c.organization || '')
-    setContactRole(c.role_title || '')
-    setContactCategory(c.category || 'Cliente / Partner')
-    setContactTier(c.access_tier)
-    setContactNda(c.nda_status)
-    setContactPhone(c.phone || '')
-    setContactEmail(c.email || '')
-    setContactNotes(c.relationship_notes || '')
-    setShowContactForm(true)
-    setError(null)
-    setTimeout(() => {
-      contactFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }, 50)
-  }
-
-  const handleSaveContact = async (e: React.FormEvent) => {
+  const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const payload = {
-        full_name: contactName.trim(),
-        organization: contactOrg.trim() || null,
-        role_title: contactRole.trim() || null,
-        category: contactCategory,
-        access_tier: contactTier,
-        nda_status: contactNda,
-        phone: contactPhone.trim() || null,
-        email: contactEmail.trim() || null,
-        relationship_notes: contactNotes.trim() || null,
-      }
+      const { error: insErr } = await supabase.from('executive_contacts').insert([
+        {
+          full_name: contactName.trim(),
+          organization: contactOrg.trim() || null,
+          role_title: contactRole.trim() || null,
+          category: contactCategory,
+          access_tier: contactTier,
+          nda_status: contactNda,
+          phone: contactPhone.trim() || null,
+          email: contactEmail.trim() || null,
+          relationship_notes: contactNotes.trim() || null,
+        },
+      ])
 
-      if (editingContactId) {
-        const { error: updErr } = await supabase
-          .from('executive_contacts')
-          .update(payload)
-          .eq('id', editingContactId)
+      if (insErr) throw insErr
 
-        if (updErr) throw updErr
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
+          status: 'SUCCESS',
+        },
+      ])
 
-        await supabase.from('audit_logs').insert([
-          {
-            user_email: userEmail,
-            action: `CONTACT_UPDATE: ${contactName.trim()} [${contactTier}]`,
-            status: 'SUCCESS',
-          },
-        ])
-      } else {
-        const { error: insErr } = await supabase.from('executive_contacts').insert([payload])
-
-        if (insErr) throw insErr
-
-        await supabase.from('audit_logs').insert([
-          {
-            user_email: userEmail,
-            action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
-            status: 'SUCCESS',
-          },
-        ])
-      }
-
-      resetContactForm()
+      setContactName('')
+      setContactOrg('')
+      setContactRole('')
+      setContactCategory('Cliente / Partner')
+      setContactTier('FILTRO SEGRETERIA')
+      setContactNda('NON RICHIESTO')
+      setContactPhone('')
+      setContactEmail('')
+      setContactNotes('')
+      setShowContactForm(false)
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -208,10 +186,6 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       return
     }
 
-    if (editingContactId === contact.id) {
-      resetContactForm()
-    }
-
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
@@ -224,68 +198,33 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     if (onAuditUpdated) onAuditUpdated()
   }
 
-  const resetPrefForm = () => {
-    setEditingPrefId(null)
-    setPrefCategory('Viaggi & Voli')
-    setPrefTitle('')
-    setPrefDetails('')
-    setShowPrefForm(false)
-  }
-
-  const handleEditPrefClick = (p: VipPreference) => {
-    setEditingPrefId(p.id)
-    setPrefCategory(p.category)
-    setPrefTitle(p.title)
-    setPrefDetails(p.details)
-    setShowPrefForm(true)
-    setError(null)
-    setTimeout(() => {
-      prefFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }, 50)
-  }
-
-  const handleSavePreference = async (e: React.FormEvent) => {
+  const handleAddPreference = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const payload = {
-        category: prefCategory,
-        title: prefTitle.trim(),
-        details: prefDetails.trim(),
-      }
+      const { error: insErr } = await supabase.from('vip_preferences').insert([
+        {
+          category: prefCategory,
+          title: prefTitle.trim(),
+          details: prefDetails.trim(),
+        },
+      ])
 
-      if (editingPrefId) {
-        const { error: updErr } = await supabase
-          .from('vip_preferences')
-          .update(payload)
-          .eq('id', editingPrefId)
+      if (insErr) throw insErr
 
-        if (updErr) throw updErr
+      await supabase.from('audit_logs').insert([
+        {
+          user_email: userEmail,
+          action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
+          status: 'SUCCESS',
+        },
+      ])
 
-        await supabase.from('audit_logs').insert([
-          {
-            user_email: userEmail,
-            action: `VIP_PREF_UPDATE: ${prefTitle.trim()} (${prefCategory})`,
-            status: 'SUCCESS',
-          },
-        ])
-      } else {
-        const { error: insErr } = await supabase.from('vip_preferences').insert([payload])
-
-        if (insErr) throw insErr
-
-        await supabase.from('audit_logs').insert([
-          {
-            user_email: userEmail,
-            action: `VIP_PREF_ADD: ${prefTitle.trim()} (${prefCategory})`,
-            status: 'SUCCESS',
-          },
-        ])
-      }
-
-      resetPrefForm()
+      setPrefTitle('')
+      setPrefDetails('')
+      setShowPrefForm(false)
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -306,14 +245,113 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       return
     }
 
-    if (editingPrefId === pref.id) {
-      resetPrefForm()
-    }
-
     await supabase.from('audit_logs').insert([
       {
         user_email: userEmail,
         action: `VIP_PREF_DELETE: ${pref.title}`,
+        status: 'SUCCESS',
+      },
+    ])
+
+    await loadExecutiveData()
+    if (onAuditUpdated) onAuditUpdated()
+  }
+
+  const resetSiteForm = () => {
+    setEditingSiteId(null)
+    setSiteCallsign('')
+    setSiteName('')
+    setSiteAddress('')
+    setSiteType('Ufficio / Sede Centrale')
+    setSiteNotes('')
+    setShowSiteForm(false)
+  }
+
+  const handleEditSite = (site: OperationalSite) => {
+    setError(null)
+    setEditingSiteId(site.id)
+    setSiteCallsign(site.callsign)
+    setSiteName(site.name)
+    setSiteAddress(site.address)
+    setSiteType(site.site_type || 'Ufficio / Sede Centrale')
+    setSiteNotes(site.notes || '')
+    setShowSiteForm(true)
+    setTimeout(() => {
+      siteFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveSite = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const cleanCallsign = siteCallsign.trim().toUpperCase()
+      const payload = {
+        callsign: cleanCallsign,
+        name: siteName.trim(),
+        address: siteAddress.trim(),
+        site_type: siteType,
+        notes: siteNotes.trim() || null,
+      }
+
+      if (editingSiteId) {
+        const { error: updErr } = await supabase
+          .from('operational_sites')
+          .update(payload)
+          .eq('id', editingSiteId)
+
+        if (updErr) throw updErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `SITE_UPDATE: [${cleanCallsign}] ${siteName.trim()}`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('operational_sites').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `SITE_ADD: [${cleanCallsign}] ${siteName.trim()}`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetSiteForm()
+      await loadExecutiveData()
+      if (onAuditUpdated) onAuditUpdated()
+    } catch (err: any) {
+      setError(err.message || 'Errore salvataggio sede / callsign.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteSite = async (site: OperationalSite) => {
+    const { error: delErr } = await supabase
+      .from('operational_sites')
+      .delete()
+      .eq('id', site.id)
+
+    if (delErr) {
+      setError('Errore eliminazione sede.')
+      return
+    }
+
+    if (editingSiteId === site.id) resetSiteForm()
+
+    await supabase.from('audit_logs').insert([
+      {
+        user_email: userEmail,
+        action: `SITE_DELETE: [${site.callsign}] ${site.name}`,
         status: 'SUCCESS',
       },
     ])
@@ -361,11 +399,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
               Direzione
             </span>
             <h2 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white">
-              Gatekeeping, Rubrica Strategica &amp; Preferenze VIP
+              Gatekeeping, Rubrica Strategica, Sedi &amp; Preferenze VIP
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-            Regole filtro chiamate/accessi, stato NDA e standard operativi della Direzione
+            Regole filtro chiamate, registro uffici/residenze con callsign e standard operativi Direzione
           </p>
         </div>
 
@@ -380,7 +418,20 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
             }
           >
-            Rubrica &amp; Filtri ({contacts.length})
+            Rubrica ({contacts.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('sites')}
+            className={
+              'min-h-[38px] px-3.5 py-2 rounded-lg text-xs sm:text-sm uppercase tracking-wider font-bold border transition ' +
+              (activeTab === 'sites'
+                ? 'bg-amber-400 text-neutral-950 border-amber-400'
+                : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-600')
+            }
+          >
+            Sedi &amp; Callsign ({sites.length})
           </button>
 
           <button
@@ -442,13 +493,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => {
-                if (showContactForm) {
-                  resetContactForm()
-                } else {
-                  setShowContactForm(true)
-                }
-              }}
+              onClick={() => setShowContactForm(!showContactForm)}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto shrink-0"
             >
               {showContactForm ? 'Chiudi Modulo' : '+ Nuovo Contatto'}
@@ -457,14 +502,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showContactForm && (
             <form
-              ref={contactFormRef}
-              onSubmit={handleSaveContact}
-              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/40 rounded-xl space-y-4 text-sm"
+              onSubmit={handleAddContact}
+              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                {editingContactId
-                  ? 'Modifica Profilo Rubrica Strategica'
-                  : 'Nuovo Profilo Rubrica Strategica & Gatekeeping'}
+                Nuovo Profilo Rubrica Strategica &amp; Gatekeeping
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -606,24 +648,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 </div>
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={resetContactForm}
-                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
-                >
-                  Annulla
-                </button>
+              <div className="flex justify-end pt-1">
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading
-                    ? 'Salvataggio...'
-                    : editingContactId
-                    ? 'Aggiorna Contatto'
-                    : 'Salva in Rubrica'}
+                  {loading ? 'Salvataggio...' : 'Salva in Rubrica'}
                 </button>
               </div>
             </form>
@@ -693,14 +724,6 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 self-start lg:self-center shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleEditContactClick(c)}
-                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
-                    >
-                      Modifica
-                    </button>
-
                     <select
                       aria-label="Livello gatekeeping"
                       value={c.access_tier}
@@ -736,6 +759,202 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
         </div>
       )}
 
+      {activeTab === 'sites' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <p className="text-xs sm:text-sm text-neutral-300">
+              Censisci uffici, filiali e residenze con un <strong>Callsign</strong> univoco per richiamarli rapidamente in Agenda e Missioni.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (showSiteForm) {
+                  resetSiteForm()
+                } else {
+                  setEditingSiteId(null)
+                  setShowSiteForm(true)
+                }
+              }}
+              className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition shrink-0"
+            >
+              {showSiteForm ? 'Chiudi Modulo' : '+ Nuova Sede / Callsign'}
+            </button>
+          </div>
+
+          {showSiteForm && (
+            <form
+              ref={siteFormRef}
+              onSubmit={handleSaveSite}
+              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/50 rounded-xl space-y-4 text-sm"
+            >
+              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
+                {editingSiteId
+                  ? 'Modifica Sede / Sito Operativo'
+                  : 'Registrazione Nuova Sede / Sito Operativo'}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
+                <div>
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Callsign Sito *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={siteCallsign}
+                    onChange={(e) => setSiteCallsign(e.target.value.toUpperCase())}
+                    placeholder="Es. HQ-EUR / RES-S / OFF-MI"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 font-mono text-base sm:text-sm text-white uppercase"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Denominazione Sede / Ufficio *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={siteName}
+                    onChange={(e) => setSiteName(e.target.value)}
+                    placeholder="Es. Seven Holding S.p.A. — Sede Principale"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Tipologia Sito
+                  </label>
+                  <select
+                    value={siteType}
+                    onChange={(e) => setSiteType(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  >
+                    <option value="Ufficio / Sede Centrale">Ufficio / Sede Centrale</option>
+                    <option value="Ufficio Secondario / Filiale">Ufficio Secondario / Filiale</option>
+                    <option value="Residenza Privata">Residenza Privata</option>
+                    <option value="Hub Logistico / Altro">Hub Logistico / Altro</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Indirizzo Esatto / Coordinate GPS *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={siteAddress}
+                    onChange={(e) => setSiteAddress(e.target.value)}
+                    placeholder="Es. Piazza Luigi Sturzo, 15, Roma"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs uppercase text-neutral-400 mb-1.5 font-semibold">
+                    Note Sicurezza / Portineria / Accessi
+                  </label>
+                  <input
+                    type="text"
+                    value={siteNotes}
+                    onChange={(e) => setSiteNotes(e.target.value)}
+                    placeholder="Es. Reception piano terra, varco carraio laterale, DEA Sant'Eugenio"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={resetSiteForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
+                >
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingSiteId
+                    ? 'Aggiorna Sede'
+                    : 'Registra Sede'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {sites.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-sm">
+              {sites.map((s) => (
+                <div
+                  key={s.id}
+                  className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between gap-3"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-amber-400 text-neutral-950 font-mono text-xs font-bold uppercase">
+                        {s.callsign}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 font-medium">
+                        {s.site_type}
+                      </span>
+                    </div>
+
+                    <div className="text-base sm:text-lg font-bold text-white">{s.name}</div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-neutral-200">
+                      <span>{s.address}</span>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          s.address
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs uppercase font-bold px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-emerald-700/70 transition"
+                      >
+                        Maps ↗
+                      </a>
+                    </div>
+
+                    {s.notes && (
+                      <div className="text-neutral-300 italic text-xs sm:text-sm">{s.notes}</div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 border-t border-neutral-800/80 pt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleEditSite(s)}
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-100 text-xs font-semibold uppercase"
+                    >
+                      Modifica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSite(s)}
+                      className="min-h-[34px] px-3 py-1 rounded-md bg-neutral-900 hover:bg-red-950/70 border border-neutral-800 hover:border-red-800 text-neutral-400 hover:text-red-300 text-xs font-semibold uppercase"
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-xl">
+              Nessuna sede censita. Clicca su &quot;+ Nuova Sede / Callsign&quot; per registrare uffici e residenze.
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === 'preferences' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -743,10 +962,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
               {(
                 [
                   'TUTTE',
+                  'Protocollo & Sicurezza',
                   'Viaggi & Voli',
                   'Hotel & Ospitalita',
                   'Food & Allergie',
-                  'Protocollo & Sicurezza',
                 ] as const
               ).map((cat) => (
                 <button
@@ -767,13 +986,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => {
-                if (showPrefForm) {
-                  resetPrefForm()
-                } else {
-                  setShowPrefForm(true)
-                }
-              }}
+              onClick={() => setShowPrefForm(!showPrefForm)}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition"
             >
               {showPrefForm ? 'Chiudi Modulo' : '+ Nuova Preferenza'}
@@ -782,14 +995,11 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showPrefForm && (
             <form
-              ref={prefFormRef}
-              onSubmit={handleSavePreference}
-              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/40 rounded-xl space-y-4 text-sm"
+              onSubmit={handleAddPreference}
+              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                {editingPrefId
-                  ? 'Modifica Standard / Preferenza Direzione'
-                  : 'Nuovo Standard / Preferenza Permanente Direzione'}
+                Nuovo Standard / Preferenza Permanente Direzione
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -802,10 +1012,10 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     onChange={(e) => setPrefCategory(e.target.value)}
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   >
+                    <option value="Protocollo & Sicurezza">Protocollo &amp; Sicurezza</option>
                     <option value="Viaggi & Voli">Viaggi &amp; Voli</option>
                     <option value="Hotel & Ospitalita">Hotel &amp; Ospitalita</option>
                     <option value="Food & Allergie">Food &amp; Allergie</option>
-                    <option value="Protocollo & Sicurezza">Protocollo &amp; Sicurezza</option>
                   </select>
                 </div>
 
@@ -818,7 +1028,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     required
                     value={prefTitle}
                     onChange={(e) => setPrefTitle(e.target.value)}
-                    placeholder="Es. Posto Aereo / Intolleranze / Tipologia Suite"
+                    placeholder="Es. SITE SECURITY & EMERGENCY — [HQ-EUR] SEVEN HOLDING S.P.A."
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                   />
                 </div>
@@ -829,33 +1039,22 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                   Dettagli &amp; Standard Richiesti *
                 </label>
                 <textarea
-                  rows={3}
+                  rows={5}
                   required
                   value={prefDetails}
                   onChange={(e) => setPrefDetails(e.target.value)}
-                  placeholder="Specifiche esatte da applicare automaticamente a ogni prenotazione"
+                  placeholder="Specifiche esatte, presidi FFOO/DEA H24 e protocolli da applicare"
                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-base sm:text-sm text-white"
                 />
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={resetPrefForm}
-                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
-                >
-                  Annulla
-                </button>
+              <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading
-                    ? 'Salvataggio...'
-                    : editingPrefId
-                    ? 'Aggiorna Preferenza'
-                    : 'Registra Preferenza'}
+                  {loading ? 'Salvataggio...' : 'Registra Preferenza'}
                 </button>
               </div>
             </form>
@@ -878,22 +1077,13 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleEditPrefClick(p)}
-                      className="text-amber-300 hover:text-amber-200 text-xs font-bold uppercase py-1"
-                    >
-                      Modifica
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePreference(p)}
-                      className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase py-1"
-                    >
-                      Rimuovi
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePreference(p)}
+                    className="text-neutral-400 hover:text-red-400 text-xs font-semibold uppercase shrink-0 py-1"
+                  >
+                    Rimuovi
+                  </button>
                 </div>
               ))}
             </div>
