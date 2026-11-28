@@ -45,6 +45,7 @@ interface ExecutiveHubProps {
 
 export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHubProps) {
   const supabase = useMemo(() => createClient(), [])
+  const contactFormRef = useRef<HTMLFormElement | null>(null)
   const siteFormRef = useRef<HTMLFormElement | null>(null)
   const prefFormRef = useRef<HTMLFormElement | null>(null)
 
@@ -60,6 +61,7 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     'TUTTI' | 'ACCESSO DIRETTO' | 'FILTRO SEGRETERIA' | 'RISERVATO / BLOCCO'
   >('TUTTI')
   const [showContactForm, setShowContactForm] = useState(false)
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [contactName, setContactName] = useState('')
   const [contactOrg, setContactOrg] = useState('')
   const [contactRole, setContactRole] = useState('')
@@ -147,46 +149,86 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
     })
   }
 
-  const handleAddContact = async (e: React.FormEvent) => {
+  const resetContactForm = () => {
+    setEditingContactId(null)
+    setContactName('')
+    setContactOrg('')
+    setContactRole('')
+    setContactCategory('Cliente / Partner')
+    setContactTier('FILTRO SEGRETERIA')
+    setContactNda('NON RICHIESTO')
+    setContactPhone('')
+    setContactEmail('')
+    setContactNotes('')
+    setShowContactForm(false)
+  }
+
+  const handleEditContact = (contact: ExecutiveContact) => {
+    setError(null)
+    setEditingContactId(contact.id)
+    setContactName(contact.full_name)
+    setContactOrg(contact.organization || '')
+    setContactRole(contact.role_title || '')
+    setContactCategory(contact.category || 'Cliente / Partner')
+    setContactTier(contact.access_tier || 'FILTRO SEGRETERIA')
+    setContactNda(contact.nda_status || 'NON RICHIESTO')
+    setContactPhone(contact.phone || '')
+    setContactEmail(contact.email || '')
+    setContactNotes(contact.relationship_notes || '')
+    setShowContactForm(true)
+    setTimeout(() => {
+      contactFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+  }
+
+  const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const { error: insErr } = await supabase.from('executive_contacts').insert([
-        {
-          full_name: contactName.trim(),
-          organization: contactOrg.trim() || null,
-          role_title: contactRole.trim() || null,
-          category: contactCategory,
-          access_tier: contactTier,
-          nda_status: contactNda,
-          phone: contactPhone.trim() || null,
-          email: contactEmail.trim() || null,
-          relationship_notes: contactNotes.trim() || null,
-        },
-      ])
+      const payload = {
+        full_name: contactName.trim(),
+        organization: contactOrg.trim() || null,
+        role_title: contactRole.trim() || null,
+        category: contactCategory,
+        access_tier: contactTier,
+        nda_status: contactNda,
+        phone: contactPhone.trim() || null,
+        email: contactEmail.trim() || null,
+        relationship_notes: contactNotes.trim() || null,
+      }
 
-      if (insErr) throw insErr
+      if (editingContactId) {
+        const { error: updErr } = await supabase
+          .from('executive_contacts')
+          .update(payload)
+          .eq('id', editingContactId)
 
-      await supabase.from('audit_logs').insert([
-        {
-          user_email: userEmail,
-          action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
-          status: 'SUCCESS',
-        },
-      ])
+        if (updErr) throw updErr
 
-      setContactName('')
-      setContactOrg('')
-      setContactRole('')
-      setContactCategory('Cliente / Partner')
-      setContactTier('FILTRO SEGRETERIA')
-      setContactNda('NON RICHIESTO')
-      setContactPhone('')
-      setContactEmail('')
-      setContactNotes('')
-      setShowContactForm(false)
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `CONTACT_UPDATE: ${contactName.trim()} [${contactTier}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      } else {
+        const { error: insErr } = await supabase.from('executive_contacts').insert([payload])
+
+        if (insErr) throw insErr
+
+        await supabase.from('audit_logs').insert([
+          {
+            user_email: userEmail,
+            action: `CONTACT_ADD: ${contactName.trim()} [${contactTier}]`,
+            status: 'SUCCESS',
+          },
+        ])
+      }
+
+      resetContactForm()
       await loadExecutiveData()
       if (onAuditUpdated) onAuditUpdated()
     } catch (err: any) {
@@ -232,6 +274,8 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
       setError('Errore eliminazione contatto.')
       return
     }
+
+    if (editingContactId === contact.id) resetContactForm()
 
     await supabase.from('audit_logs').insert([
       {
@@ -599,7 +643,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
             <button
               type="button"
-              onClick={() => setShowContactForm(!showContactForm)}
+              onClick={() => {
+                if (showContactForm) {
+                  resetContactForm()
+                } else {
+                  setEditingContactId(null)
+                  setShowContactForm(true)
+                }
+              }}
               className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase tracking-wider px-4 py-2 rounded-lg transition self-start md:self-auto shrink-0"
             >
               {showContactForm ? 'Chiudi Modulo' : '+ Nuovo Contatto'}
@@ -608,11 +659,14 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
           {showContactForm && (
             <form
-              onSubmit={handleAddContact}
-              className="p-4 sm:p-5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-4 text-sm"
+              ref={contactFormRef}
+              onSubmit={handleSaveContact}
+              className="p-4 sm:p-5 bg-neutral-950 border border-amber-500/50 rounded-xl space-y-4 text-sm"
             >
               <div className="text-sm uppercase tracking-wider text-amber-400 font-bold">
-                Nuovo Profilo Rubrica Strategica &amp; Gatekeeping
+                {editingContactId
+                  ? 'Modifica Profilo Rubrica Strategica & Gatekeeping'
+                  : 'Nuovo Profilo Rubrica Strategica & Gatekeeping'}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -754,13 +808,24 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
                 </div>
               </div>
 
-              <div className="flex justify-end pt-1">
+              <div className="flex flex-wrap justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={resetContactForm}
+                  className="min-h-[40px] bg-neutral-900 text-neutral-300 border border-neutral-700 text-xs sm:text-sm uppercase px-4 py-2 rounded-lg font-semibold"
+                >
+                  Annulla
+                </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="min-h-[40px] bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs sm:text-sm uppercase px-5 py-2 rounded-lg transition disabled:opacity-50"
                 >
-                  {loading ? 'Salvataggio...' : 'Salva in Rubrica'}
+                  {loading
+                    ? 'Salvataggio...'
+                    : editingContactId
+                    ? 'Aggiorna Contatto'
+                    : 'Salva in Rubrica'}
                 </button>
               </div>
             </form>
@@ -848,8 +913,16 @@ export default function ExecutiveHub({ userEmail, onAuditUpdated }: ExecutiveHub
 
                     <button
                       type="button"
+                      onClick={() => handleEditContact(c)}
+                      className="min-h-[38px] bg-neutral-900 hover:bg-neutral-800 text-neutral-100 border border-neutral-700 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
+                    >
+                      Modifica
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleDeleteContact(c)}
-                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                      className="min-h-[38px] bg-neutral-900 hover:bg-red-950/70 text-neutral-400 hover:text-red-300 border border-neutral-800 hover:border-red-800 text-xs font-semibold uppercase px-3 py-1.5 rounded-lg transition"
                     >
                       Elimina
                     </button>
